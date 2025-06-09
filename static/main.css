@@ -1,0 +1,23 @@
+body {
+    margin: 0.5rem 1rem;
+    font-family: sans-serif;
+}
+
+form {
+    max-width: 30rem;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.5rem;
+}
+
+table, td, th {
+    border: 1px solid;
+}
+
+td, th {
+    padding: 0.5rem 0.25rem;
+}
+
+table {
+    border-collapse: collapse;
+}
