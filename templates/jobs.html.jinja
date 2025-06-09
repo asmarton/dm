@@ -23,8 +23,8 @@
             {% for job in jobs %}
                 <tr>
                     <td>{{ job.id }}</td>
-                    <td>{{ job.start_year }}-{{ job.start_month }}</td>
-                    <td>{{ job.end_year }}-{{ job.end_month }}</td>
+                    <td>{{ job.start_year }}-{{ "%02d"|format(job.start_month) }}</td>
+                    <td>{{ job.end_year }}-{{ "%02d"|format(job.end_month) }}</td>
 {#                        <td>YTD?</td>#}
                     <td>${{ job.initial_investment }}</td>
                     <td>{{ job.tickers }}</td>
