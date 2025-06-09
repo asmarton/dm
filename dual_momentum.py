@@ -9,7 +9,7 @@ from dateutil.relativedelta import relativedelta
 from db.schemas import JobBase
 
 
-def dual_momentum(job: JobBase):
+def dual_momentum(job: JobBase) -> tuple[pd.DataFrame, pd.DataFrame]:
     tickers = [t.strip() for t in job.tickers.split(",") if t.strip()]
 
     start = datetime.strptime(f'{job.start_year}-{job.start_month:02}-01', '%Y-%m-%d') - relativedelta(
@@ -50,8 +50,9 @@ def dual_momentum(job: JobBase):
             # Relative momentum
             best_asset = momentums.idxmax()
 
+            am_asset = job.single_absolute_momentum or best_asset
             # Absolute momentum
-            if momentums[best_asset] > t_bills.iloc[i]['TBillRate']:
+            if momentums[am_asset] > t_bills.iloc[i]['TBillRate']:
                 if selected_asset != best_asset:
                     trades.loc[len(trades)] = [month_start, selected_asset, best_asset]
                     switched = True
@@ -68,7 +69,7 @@ def dual_momentum(job: JobBase):
             asset_return = 0
 
         sc = 0 if not switched else job.switching_cost / 100
-        balance = round(balance * (1 - sc) * (1 + asset_return), 4)
+        balance = balance * (1 - sc) * (1 + asset_return)
         portfolio.iloc[i] = [selected_asset, asset_return, sc, balance]
 
     # Cut portfolio to real start date.
@@ -78,6 +79,21 @@ def dual_momentum(job: JobBase):
         portfolio[f'{ticker} Return'] = monthly_returns[ticker]
         portfolio[f'{ticker} Balance'] = job.initial_investment * (1 + portfolio[f'{ticker} Return']).cumprod()
 
-    portfolio[f'Treasuries Return'] = t_bills['TBillRate']
+    portfolio[f'Treasury Bills Return'] = t_bills['TBillRate']
+    portfolio = portfolio.infer_objects()
+
+    trades.set_index('Trade Date', inplace=True)
 
     return portfolio, trades
+
+
+def humanize_portfolio(portfolio: pd.DataFrame) -> pd.DataFrame:
+    portfolio = portfolio.copy()
+
+    for col in portfolio.columns:
+        if col.endswith('Balance'):
+            portfolio[col] = portfolio[col].round(3)
+        elif col.endswith('Return') or col == 'Switching Cost':
+            portfolio[col] = (portfolio[col] * 100).round(2).astype(str) + '%'
+
+    return portfolio

@@ -1,5 +1,3 @@
-import datetime
-
 from sqlalchemy import Column, Integer, String, DateTime, Double
 from sqlalchemy.orm import declarative_base
 
@@ -21,4 +19,5 @@ class Job(Base):
     rebalance_period = Column(Integer, nullable=False)
     lookback_period = Column(Integer, nullable=False)
     switching_cost = Column(Double, nullable=False)
-    createdAt = Column(DateTime, nullable=False, default=datetime.datetime.now(datetime.UTC))
+    single_absolute_momentum = Column(String, nullable=True)
+    created_at = Column(DateTime, nullable=False, server_default='current_timestamp')

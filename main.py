@@ -1,6 +1,5 @@
 import logging
 from datetime import datetime
-from decimal import Decimal
 from http import HTTPStatus
 from typing import Annotated
 
@@ -10,10 +9,10 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
-import crud
+import job_service
 from db import schemas
 from db.database import SessionLocal
-from dual_momentum import dual_momentum
+from dual_momentum import dual_momentum, humanize_portfolio
 
 
 def get_db_session():
@@ -35,13 +34,24 @@ templates = Jinja2Templates(directory="templates")
 
 
 @app.get("/", response_class=HTMLResponse)
-async def index(request: Request, session: SessionDep):
-    jobs = crud.get_jobs(session)
-
+async def index(request: Request):
     return templates.TemplateResponse(
         request=request,
         name="index.html.jinja",
-        context={"jobs": jobs},
+    )
+
+
+@app.get("/jobs", response_class=HTMLResponse)
+async def jobs(request: Request, session: SessionDep, page: int = 0):
+    limit = 20
+    offset = page * limit
+    jobs = job_service.get_jobs_paginated(session, limit, offset)
+    count = job_service.count_jobs(session)
+
+    return templates.TemplateResponse(
+        request=request,
+        name="jobs.html.jinja",
+        context={"jobs": jobs, "count": count, "page": page, "limit": limit, "offset": offset},
     )
 
 
@@ -51,7 +61,7 @@ class ModelData(BaseModel):
     # include_ytd: bool | None = None
     initial_investment: float
     tickers: str
-    # single_absolute_momentum: str | None = None
+    single_absolute_momentum: str | None = None
     safe_asset: str
     rebalance_period: int
     lookback_period: int
@@ -74,10 +84,12 @@ async def model(data: Annotated[ModelData, Form()], session: SessionDep):
         rebalance_period=data.rebalance_period,
         lookback_period=data.lookback_period,
         switching_cost=data.switching_cost,
+        single_absolute_momentum=data.single_absolute_momentum,
     )
-    job = crud.create_job(session, job)
+    job = job_service.create_job(session, job)
 
     portfolio, trades = dual_momentum(job)
+    portfolio = humanize_portfolio(portfolio)
 
     with open(f'./static/results/{job.id}-trades.csv', 'w') as f:
         f.write(trades.to_csv())

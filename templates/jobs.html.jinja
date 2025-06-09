@@ -1,0 +1,54 @@
+<section id="jobs">
+    <h2>Past jobs</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Start</th>
+                <th>End</th>
+{#                    <th>YTD?</th>#}
+                <th>Initial Amt</th>
+                <th>Tickers</th>
+                <th><abbr title="Single Absolute Momentum">SAM</abbr></th>
+                <th>Rebalance Period</th>
+                <th>Lookback Period</th>
+                <th>Switching Cost</th>
+                <th>Returns</th>
+                <th>Trades</th>
+                <th>Created At</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for job in jobs %}
+                <tr>
+                    <td>{{ job.id }}</td>
+                    <td>{{ job.start_year }}-{{ job.start_month }}</td>
+                    <td>{{ job.end_year }}-{{ job.end_month }}</td>
+{#                        <td>YTD?</td>#}
+                    <td>${{ job.initial_investment }}</td>
+                    <td>{{ job.tickers }}</td>
+                    <td>{{ job.single_absolute_momentum if job.single_absolute_momentum is not none }}</td>
+                    <td>{{ job.rebalance_period }}</td>
+                    <td>{{ job.lookback_period }}</td>
+                    <td>{{ job.switching_cost }}%</td>
+                    <td><a href="/static/results/{{ job.id }}-portfolio.csv" download>[Download]</a></td>
+                    <td><a href="/static/results/{{ job.id }}-trades.csv" download>[Download]</a></td>
+                    <td>{{ job.created_at }}</td>
+                </tr>
+            {% endfor %}
+            {% if jobs|length == 0 %}
+                <tr>
+                    <td colspan="12" style="text-align: center">No results.</td>
+                </tr>
+            {% endif %}
+        </tbody>
+    </table>
+
+    <div style="margin-top: 1rem;">
+        <button hx-get="/jobs?page={{ page - 1 }}" hx-swap="outerHTML" hx-target="#jobs" {% if page == 0 %}disabled{% endif %}>Prev</button>
+        <span>Page {{ page + 1 }}/{{ (count / limit)|round(0, 'floor')|int + 1 }}</span>
+        <button hx-get="/jobs?page={{ page + 1 }}" hx-swap="outerHTML" hx-target="#jobs" {% if page * limit + jobs|length >= count %}disabled{% endif %}>Next</button>
+        <span>Total {{ count }} jobs</span>
+    </div>
+</section>

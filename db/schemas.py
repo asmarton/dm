@@ -1,4 +1,4 @@
-from decimal import Decimal
+from datetime import datetime
 
 from pydantic import BaseModel
 
@@ -13,6 +13,7 @@ class JobBase(BaseModel):
     rebalance_period: int
     lookback_period: int
     switching_cost: float
+    single_absolute_momentum: str | None = None
 
 
 class JobCreate(JobBase):
@@ -21,6 +22,7 @@ class JobCreate(JobBase):
 
 class Job(JobBase):
     id: int
+    created_at: datetime
 
     class Config:
         orm_mode = True

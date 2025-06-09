@@ -15,9 +15,10 @@ table, td, th {
 }
 
 td, th {
-    padding: 0.5rem 0.25rem;
+    padding: 0.5rem 0.40rem;
 }
 
 table {
     border-collapse: collapse;
+    font-family: monospace;
 }
