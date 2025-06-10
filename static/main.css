@@ -22,3 +22,24 @@ table {
     border-collapse: collapse;
     font-family: monospace;
 }
+
+button, .button {
+    border: 1px solid black;
+    padding: 0.25rem 0.5rem;
+    box-shadow: 2px 2px 0 0;
+    cursor: pointer;
+    background-color: #f3f3f3;
+
+    &:hover {
+        background-color: #e3e3e3;
+    }
+}
+
+a.button {
+    text-decoration: none;
+}
+
+input {
+    border: 1px solid black;
+    padding: 0.25rem 0.5rem;
+}

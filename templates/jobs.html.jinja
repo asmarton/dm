@@ -32,8 +32,8 @@
                     <td>{{ job.rebalance_period }}</td>
                     <td>{{ job.lookback_period }}</td>
                     <td>{{ job.switching_cost }}%</td>
-                    <td><a href="/static/results/{{ job.id }}-portfolio.csv" download>[Download]</a></td>
-                    <td><a href="/static/results/{{ job.id }}-trades.csv" download>[Download]</a></td>
+                    <td><a href="/static/results/{{ job.id }}-portfolio.csv" download class="button">Download ⬇</a></td>
+                    <td><a href="/static/results/{{ job.id }}-trades.csv" download class="button">Download ⬇</a></td>
                     <td>{{ job.created_at }}</td>
                 </tr>
             {% endfor %}
