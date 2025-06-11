@@ -31,6 +31,7 @@ def dual_momentum(job: JobBase) -> tuple[pd.DataFrame, pd.DataFrame]:
     t_bills = pdr.data.DataReader('TB3MS', 'fred', start='1934-01-01', session=pdr_session)
     t_bills = t_bills.rename(columns={'TB3MS': 'TBillRate'}) / 100
     t_bills = t_bills.reindex(monthly_returns.index, method='ffill')
+    t_bills['Lookback Return'] = t_bills['TBillRate'].rolling(window=job.lookback_period).mean() / 12 * job.lookback_period
 
     portfolio = pd.DataFrame(index=monthly_prices.index,
                              columns=['Selected Asset', 'DM Return', 'Switching Cost', 'DM Balance'])
@@ -52,7 +53,7 @@ def dual_momentum(job: JobBase) -> tuple[pd.DataFrame, pd.DataFrame]:
 
             am_asset = job.single_absolute_momentum or best_asset
             # Absolute momentum
-            if momentums[am_asset] > t_bills.iloc[i]['TBillRate']:
+            if momentums[am_asset] > t_bills.iloc[i]['Lookback Return']:
                 if selected_asset != best_asset:
                     trades.loc[len(trades)] = [month_start, selected_asset, best_asset]
                     switched = True
