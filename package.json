@@ -1,0 +1,29 @@
+{
+  "name": "dm",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite build --watch"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/asmarton/dm.git"
+  },
+  "author": "",
+  "license": "UNLICENSED",
+  "bugs": {
+    "url": "https://github.com/asmarton/dm/issues"
+  },
+  "homepage": "https://github.com/asmarton/dm#readme",
+  "description": "",
+  "devDependencies": {
+    "vite": "^6.3.5"
+  },
+  "dependencies": {
+    "@tailwindcss/vite": "^4.1.8",
+    "htmx.org": "^2.0.4",
+    "lightweight-charts": "^5.0.7",
+    "tailwindcss": "^4.1.8"
+  }
+}

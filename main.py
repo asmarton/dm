@@ -3,11 +3,12 @@ from datetime import datetime
 from http import HTTPStatus
 from typing import Annotated
 
-from fastapi import FastAPI, Request, Form, Depends
+from fastapi import FastAPI, Request, Form, Depends, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
+import pandas as pd
 
 import job_service
 from db import schemas
@@ -55,6 +56,24 @@ async def jobs(request: Request, session: SessionDep, page: int = 0):
     )
 
 
+@app.get("/jobs/{job_id}", response_class=HTMLResponse)
+async def details(request: Request, session: SessionDep, job_id: int = 0):
+    job = job_service.get_job(session, job_id)
+
+    if not job:
+        raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Job not found")
+
+    portfolio_path, trades_path = job_results_paths(job.id)
+    portfolio = pd.read_csv(portfolio_path)
+    trades = pd.read_csv(trades_path)
+
+    return templates.TemplateResponse(
+        request=request,
+        name="details.html.jinja",
+        context={"job": job, "portfolio": portfolio, "trades": trades},
+    )
+
+
 class ModelData(BaseModel):
     start_date: str
     end_date: str
@@ -91,9 +110,16 @@ async def model(data: Annotated[ModelData, Form()], session: SessionDep):
     portfolio, trades = dual_momentum(job)
     portfolio = humanize_portfolio(portfolio)
 
-    with open(f'./static/results/{job.id}-trades.csv', 'w') as f:
-        f.write(trades.to_csv())
-    with open(f'./static/results/{job.id}-portfolio.csv', 'w') as f:
+    portfolio_path, trades_path = job_results_paths(job.id)
+    with open(portfolio_path, 'w') as f:
         f.write(portfolio.to_csv())
+    with open(trades_path, 'w') as f:
+        f.write(trades.to_csv())
 
     return RedirectResponse('/', status_code=HTTPStatus.FOUND)
+
+
+def job_results_paths(job_id: int) -> tuple[str, str]:
+    portfolio_path = f'./static/results/{job_id}-portfolio.csv'
+    trades_path = f'./static/results/{job_id}-trades.csv'
+    return portfolio_path, trades_path

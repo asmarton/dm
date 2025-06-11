@@ -5,10 +5,13 @@
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <title>Dual Momentum</title>
 
-        <link rel="stylesheet" href="/static/main.css">
-        <script src="https://unpkg.com/htmx.org@2.0.4" integrity="sha384-HGfztofotfshcF7+8n44JQL2oJmowVChPTg48S+jvZoztPfvwD79OC/LTtG6dMp+" crossorigin="anonymous"></script>
+        <link rel="stylesheet" href="/static/dist/main.css">
+        <script type="module" src="/static/dist/main.js"></script>
     </head>
-    <body>
+    <body class="mx-4 my-3">
+        <nav class="mb-4 text-lg">
+            <a href="/">Home</a>
+        </nav>
         {% block main %}
 
         {% endblock %}

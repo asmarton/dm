@@ -197,3 +197,4 @@ cython_debug/
 /static/results
 *.db
 *.sqlite
+node_modules

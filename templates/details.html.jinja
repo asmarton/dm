@@ -1,0 +1,61 @@
+{% extends "layout.html.jinja" %}
+
+{% block main %}
+    <div class="flex flex-col gap-8">
+        <h1 class="text-4xl font-bold">Job {{ job.id }}</h1>
+
+        <section>
+            <h2 class="text-2xl font-bold mb-4">Config</h2>
+
+            <dl class="grid grid-cols-2 w-fit gap-x-4 mb-3">
+                <dt>Start</dt>
+                <dd>{{ job.start_year }}-{{ "%02d"|format(job.start_month) }}</dd>
+                <dt>End</dt>
+                <dd>{{ job.end_year }}-{{ "%02d"|format(job.end_month) }}</dd>
+                <dt>Initial Investment</dt>
+                <dd>${{ job.initial_investment }}</dd>
+                <dt>Tickers</dt>
+                <dd>{{ job.tickers }}</dd>
+                <dt>Safety Asset</dt>
+                <dd>{{ job.safe_asset }}</dd>
+                <dt>Single Absolute Momentum</dt>
+                <dd>{{ job.single_absolute_momentum if job.single_absolute_momentum != '' else 'No' }}</dd>
+                <dt>Rebalance Period</dt>
+                <dd>{{ job.rebalance_period }}</dd>
+                <dt>Lookback Period</dt>
+                <dd>{{ job.lookback_period }}</dd>
+                <dt>Switching Cost</dt>
+                <dd>{{ job.switching_cost }}%</dd>
+                <dt>Created At</dt>
+                <dd>{{ job.created_at }}</dd>
+            </dl>
+
+            <div class="font-mono flex gap-4">
+                <a href="/static/results/{{ job.id }}-portfolio.csv" download class="button !text-black !no-underline">Download Portfolio ⬇</a>
+                <a href="/static/results/{{ job.id }}-trades.csv" download class="button !text-black !no-underline">Download Trades ⬇</a>
+            </div>
+        </section>
+
+        <section>
+            <h2 class="text-2xl font-bold mb-4">Balance evolution</h2>
+            <div id="chart-container" class="w-full h-[25rem]"></div>
+        </section>
+
+        <section>
+            <h2 class="text-2xl font-bold mb-4">Portfolio</h2>
+            {{ portfolio.to_html() | safe }}
+        </section>
+
+        <section>
+            <h2 class="text-2xl font-bold mb-4">Trades</h2>
+            {{ trades.to_html() | safe }}
+        </section>
+    </div>
+
+    <script type="module">
+        import '/static/dist/chart.js';
+
+        const portfolio = {{ portfolio.set_index('Date').to_json(orient='split')|safe }};
+        setupChart(document.getElementById('chart-container'), portfolio);
+    </script>
+{% endblock %}

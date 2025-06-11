@@ -1,9 +1,9 @@
 {% extends "layout.html.jinja" %}
 
 {% block main %}
-    <h1>Dual Momentum</h1>
+    <h1 class="text-4xl font-bold mb-4">Dual Momentum</h1>
 
-    <form method="post" action="/">
+    <form method="post" action="/" class="max-w-[30rem] grid grid-cols-[auto_1fr] gap-y-2 gap-x-4 items-center">
         <label for="start_date">Start Date*</label>
         <input id="start_date" name="start_date" type="month" value="2000-01" required>
 

@@ -7,6 +7,10 @@ def get_jobs_paginated(db: Session, limit: int, offset: int) -> list[type[models
     return db.query(models.Job).order_by(models.Job.created_at.desc()).offset(offset).limit(limit).all()
 
 
+def get_job(db: Session, id: int) -> schemas.Job | None:
+    return db.query(models.Job).get(id)
+
+
 def count_jobs(db: Session) -> int:
     return db.query(models.Job).count()
 

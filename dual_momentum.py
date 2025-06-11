@@ -34,7 +34,7 @@ def dual_momentum(job: JobBase) -> tuple[pd.DataFrame, pd.DataFrame]:
     t_bills['Lookback Return'] = t_bills['TBillRate'].rolling(window=job.lookback_period).mean() / 12 * job.lookback_period
 
     portfolio = pd.DataFrame(index=monthly_prices.index,
-                             columns=['Selected Asset', 'DM Return', 'Switching Cost', 'DM Balance'])
+                             columns=['Selected Asset', 'Dual Momentum Return', 'Switching Cost', 'Dual Momentum Balance'])
     selected_asset = tickers[0]
     trades = pd.DataFrame(columns=['Trade Date', 'Sold', 'Bought'])
     month_start = monthly_prices.index[job.lookback_period].replace(day=1)
