@@ -9,6 +9,18 @@ from dateutil.relativedelta import relativedelta
 from db.schemas import JobBase
 
 
+def get_tbills(job: JobBase, index: pd.DataFrame) -> pd.DataFrame:
+    pdr_expire_after = timedelta(days=1)
+    pdr_session = requests_cache.CachedSession(cache_name='fred_cache', backend='sqlite', expire_after=pdr_expire_after)
+
+    t_bills = pdr.data.DataReader('TB3MS', 'fred', start='1934-01-01', session=pdr_session)
+    t_bills = t_bills.rename(columns={'TB3MS': 'TBillRate'}) / 100
+    t_bills = t_bills.reindex(index, method='ffill')
+    t_bills['Lookback Return'] = t_bills['TBillRate'].rolling(window=job.lookback_period).mean() / 12 * job.lookback_period
+
+    return t_bills
+
+
 def dual_momentum(job: JobBase) -> tuple[pd.DataFrame, pd.DataFrame]:
     tickers = [t.strip() for t in job.tickers.split(",") if t.strip()]
 
@@ -20,18 +32,17 @@ def dual_momentum(job: JobBase) -> tuple[pd.DataFrame, pd.DataFrame]:
     if job.lookback_period < job.rebalance_period:
         raise RuntimeError('Lookback period cannot be less than rebalancing period')
 
-    all_assets = tickers + [job.safe_asset]
+    tbill_etf = 'BIL'
+    all_assets = tickers + [job.safe_asset, tbill_etf]
     prices = yf.download(tickers=all_assets, start=start, end=end, auto_adjust=True)['Close']
     monthly_prices = prices.resample('ME').last()
     monthly_returns = monthly_prices.pct_change().fillna(0)
 
-    pdr_expire_after = timedelta(days=1)
-    pdr_session = requests_cache.CachedSession(cache_name='fred_cache', backend='sqlite', expire_after=pdr_expire_after)
+    monthly_prices_market = monthly_prices.drop(columns=[job.safe_asset, tbill_etf])
+    monthly_prices_bil = monthly_prices[[tbill_etf]]
+    monthly_prices_safe = monthly_prices[[job.safe_asset]]
 
-    t_bills = pdr.data.DataReader('TB3MS', 'fred', start='1934-01-01', session=pdr_session)
-    t_bills = t_bills.rename(columns={'TB3MS': 'TBillRate'}) / 100
-    t_bills = t_bills.reindex(monthly_returns.index, method='ffill')
-    t_bills['Lookback Return'] = t_bills['TBillRate'].rolling(window=job.lookback_period).mean() / 12 * job.lookback_period
+    # t_bills = get_tbills(job, monthly_returns.index)
 
     portfolio = pd.DataFrame(index=monthly_prices.index,
                              columns=['Selected Asset', 'Dual Momentum Return', 'Switching Cost', 'Dual Momentum Balance'])
@@ -47,13 +58,17 @@ def dual_momentum(job: JobBase) -> tuple[pd.DataFrame, pd.DataFrame]:
 
         switched = False
         if (i - job.lookback_period) % job.rebalance_period == 0:
-            momentums = (monthly_prices.iloc[i] / monthly_prices.iloc[i - job.lookback_period]) - 1
+            market_lookback_return = (monthly_prices_market.iloc[i] / monthly_prices_market.iloc[i - job.lookback_period]) - 1
+            safe_lookback_return = (monthly_prices_safe.iloc[i] / monthly_prices_safe.iloc[i - job.lookback_period]) - 1
+            bil_lookback_return = (monthly_prices_bil.iloc[i] / monthly_prices_bil.iloc[i - job.lookback_period]) - 1
+
             # Relative momentum
-            best_asset = momentums.idxmax()
+            best_asset = market_lookback_return.idxmax()
 
             am_asset = job.single_absolute_momentum or best_asset
             # Absolute momentum
-            if momentums[am_asset] > t_bills.iloc[i]['Lookback Return']:
+            # if momentums[am_asset] > t_bills.iloc[i]['Lookback Return']:
+            if market_lookback_return[am_asset] > bil_lookback_return[tbill_etf]:
                 if selected_asset != best_asset:
                     trades.loc[len(trades)] = [month_start, selected_asset, best_asset]
                     switched = True
@@ -80,7 +95,7 @@ def dual_momentum(job: JobBase) -> tuple[pd.DataFrame, pd.DataFrame]:
         portfolio[f'{ticker} Return'] = monthly_returns[ticker]
         portfolio[f'{ticker} Balance'] = job.initial_investment * (1 + portfolio[f'{ticker} Return']).cumprod()
 
-    portfolio[f'Treasury Bills Return'] = t_bills['TBillRate']
+    # portfolio[f'Treasury Bills Return'] = t_bills['TBillRate']
     portfolio = portfolio.infer_objects()
 
     trades.set_index('Trade Date', inplace=True)
