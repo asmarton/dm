@@ -40,9 +40,6 @@ def dual_momentum(job: JobBase) -> tuple[pd.DataFrame, pd.DataFrame]:
 
     monthly_prices_market = monthly_prices.drop(columns=[job.safe_asset, tbill_etf])
     monthly_prices_bil = monthly_prices[[tbill_etf]]
-    monthly_prices_safe = monthly_prices[[job.safe_asset]]
-
-    # t_bills = get_tbills(job, monthly_returns.index)
 
     portfolio = pd.DataFrame(index=monthly_prices.index,
                              columns=['Selected Asset', 'Dual Momentum Return', 'Switching Cost', 'Dual Momentum Balance'])
@@ -59,7 +56,6 @@ def dual_momentum(job: JobBase) -> tuple[pd.DataFrame, pd.DataFrame]:
         switched = False
         if (i - job.lookback_period) % job.rebalance_period == 0:
             market_lookback_return = (monthly_prices_market.iloc[i] / monthly_prices_market.iloc[i - job.lookback_period]) - 1
-            safe_lookback_return = (monthly_prices_safe.iloc[i] / monthly_prices_safe.iloc[i - job.lookback_period]) - 1
             bil_lookback_return = (monthly_prices_bil.iloc[i] / monthly_prices_bil.iloc[i - job.lookback_period]) - 1
 
             # Relative momentum
@@ -67,7 +63,6 @@ def dual_momentum(job: JobBase) -> tuple[pd.DataFrame, pd.DataFrame]:
 
             am_asset = job.single_absolute_momentum or best_asset
             # Absolute momentum
-            # if momentums[am_asset] > t_bills.iloc[i]['Lookback Return']:
             if market_lookback_return[am_asset] > bil_lookback_return[tbill_etf]:
                 if selected_asset != best_asset:
                     trades.loc[len(trades)] = [month_start, selected_asset, best_asset]
@@ -95,7 +90,6 @@ def dual_momentum(job: JobBase) -> tuple[pd.DataFrame, pd.DataFrame]:
         portfolio[f'{ticker} Return'] = monthly_returns[ticker]
         portfolio[f'{ticker} Balance'] = job.initial_investment * (1 + portfolio[f'{ticker} Return']).cumprod()
 
-    # portfolio[f'Treasury Bills Return'] = t_bills['TBillRate']
     portfolio = portfolio.infer_objects()
 
     trades.set_index('Trade Date', inplace=True)
