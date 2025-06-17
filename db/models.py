@@ -20,4 +20,5 @@ class Job(Base):
     lookback_period = Column(Integer, nullable=False)
     switching_cost = Column(Double, nullable=False)
     single_absolute_momentum = Column(String, nullable=True)
+    user = Column(String, nullable=False, server_default='*')
     created_at = Column(DateTime, nullable=False, server_default='current_timestamp')

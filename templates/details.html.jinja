@@ -8,6 +8,8 @@
             <h2 class="text-2xl font-bold mb-4">Config</h2>
 
             <dl class="grid grid-cols-2 w-fit gap-x-4 mb-3">
+                <dt>User</dt>
+                <dd>{{ job.user }}</dd>
                 <dt>Start</dt>
                 <dd>{{ job.start_year }}-{{ "%02d"|format(job.start_month) }}</dd>
                 <dt>End</dt>

@@ -1,6 +1,7 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
+
 
 class JobBase(BaseModel):
     start_year: int
@@ -14,6 +15,7 @@ class JobBase(BaseModel):
     lookback_period: int
     switching_cost: float
     single_absolute_momentum: str | None = None
+    user: str = Field(min_length=1)
 
 
 class JobCreate(JobBase):

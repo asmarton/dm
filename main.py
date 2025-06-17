@@ -3,7 +3,7 @@ from datetime import datetime
 from http import HTTPStatus
 from typing import Annotated
 
-from fastapi import FastAPI, Request, Form, Depends, HTTPException
+from fastapi import FastAPI, Request, Form, Depends, HTTPException, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -36,24 +36,27 @@ templates = Jinja2Templates(directory="templates")
 
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
+    user = request.cookies.get('user')
     return templates.TemplateResponse(
         request=request,
         name="index.html.jinja",
+        context={"user": user},
     )
 
 
 @app.get("/jobs", response_class=HTMLResponse)
-async def jobs(request: Request, session: SessionDep, page: int = 0):
+async def jobs(request: Request, session: SessionDep, page: int = 0, user_filter: str | None = None):
     limit = 20
     offset = page * limit
-    jobs = job_service.get_jobs_paginated(session, limit, offset)
-    count = job_service.count_jobs(session)
+    jobs = job_service.get_jobs_paginated(session, limit, offset, user_filter)
+    count = job_service.count_jobs(session, user_filter)
 
-    return templates.TemplateResponse(
+    response = templates.TemplateResponse(
         request=request,
         name="jobs.html.jinja",
-        context={"jobs": jobs, "count": count, "page": page, "limit": limit, "offset": offset},
+        context={"jobs": jobs, "count": count, "page": page, "limit": limit, "offset": offset, "user_filter": user_filter},
     )
+    return response
 
 
 @app.get("/jobs/{job_id}", response_class=HTMLResponse)
@@ -74,10 +77,10 @@ async def details(request: Request, session: SessionDep, job_id: int = 0):
     )
 
 
-class ModelData(BaseModel):
+class JobFormData(BaseModel):
+    user: str
     start_date: str
     end_date: str
-    # include_ytd: bool | None = None
     initial_investment: float
     tickers: str
     single_absolute_momentum: str | None = None
@@ -88,7 +91,7 @@ class ModelData(BaseModel):
 
 
 @app.post("/")
-async def model(data: Annotated[ModelData, Form()], session: SessionDep):
+async def model(data: Annotated[JobFormData, Form()], session: SessionDep):
     start_date = datetime.strptime(data.start_date, "%Y-%m")
     end_date = datetime.strptime(data.end_date, "%Y-%m")
 
@@ -103,7 +106,8 @@ async def model(data: Annotated[ModelData, Form()], session: SessionDep):
         rebalance_period=data.rebalance_period,
         lookback_period=data.lookback_period,
         switching_cost=data.switching_cost,
-        single_absolute_momentum=data.single_absolute_momentum,
+        single_absolute_momentum=data.single_absolute_momentum if data.single_absolute_momentum else None,
+        user=data.user,
     )
     job = job_service.create_job(session, job)
 
@@ -116,7 +120,9 @@ async def model(data: Annotated[ModelData, Form()], session: SessionDep):
     with open(trades_path, 'w') as f:
         f.write(trades.to_csv())
 
-    return RedirectResponse('/', status_code=HTTPStatus.FOUND)
+    response = RedirectResponse('/', status_code=HTTPStatus.FOUND)
+    response.set_cookie(key='user', value=data.user, path='/', max_age=2592000)
+    return response
 
 
 def job_results_paths(job_id: int) -> tuple[str, str]:
