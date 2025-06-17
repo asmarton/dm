@@ -6,7 +6,7 @@ Base = declarative_base()
 
 
 class Job(Base):
-    __tablename__ = "jobs"
+    __tablename__ = 'jobs'
 
     id = Column(Integer, primary_key=True)
     start_year = Column(Integer, nullable=False)

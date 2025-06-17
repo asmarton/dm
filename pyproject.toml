@@ -17,3 +17,14 @@ dependencies = [
     "uvicorn>=0.34.3",
     "yfinance>=0.2.61",
 ]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.11.13",
+]
+
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.format]
+quote-style = 'single'

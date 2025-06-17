@@ -3,7 +3,7 @@ from datetime import datetime
 from http import HTTPStatus
 from typing import Annotated
 
-from fastapi import FastAPI, Request, Form, Depends, HTTPException, Response
+from fastapi import FastAPI, Request, Form, Depends, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -27,24 +27,24 @@ def get_db_session():
 SessionDep = Annotated[SessionLocal, Depends(get_db_session)]
 
 app = FastAPI()
-app.mount("/static", StaticFiles(directory="static"), name="static")
+app.mount('/static', StaticFiles(directory='static'), name='static')
 
 logger = logging.getLogger('uvicorn.error')
 
-templates = Jinja2Templates(directory="templates")
+templates = Jinja2Templates(directory='templates')
 
 
-@app.get("/", response_class=HTMLResponse)
+@app.get('/', response_class=HTMLResponse)
 async def index(request: Request):
     user = request.cookies.get('user')
     return templates.TemplateResponse(
         request=request,
-        name="index.html.jinja",
-        context={"user": user},
+        name='index.html.jinja',
+        context={'user': user},
     )
 
 
-@app.get("/jobs", response_class=HTMLResponse)
+@app.get('/jobs', response_class=HTMLResponse)
 async def jobs(request: Request, session: SessionDep, page: int = 0, user_filter: str | None = None):
     limit = 20
     offset = page * limit
@@ -53,18 +53,25 @@ async def jobs(request: Request, session: SessionDep, page: int = 0, user_filter
 
     response = templates.TemplateResponse(
         request=request,
-        name="jobs.html.jinja",
-        context={"jobs": jobs, "count": count, "page": page, "limit": limit, "offset": offset, "user_filter": user_filter},
+        name='jobs.html.jinja',
+        context={
+            'jobs': jobs,
+            'count': count,
+            'page': page,
+            'limit': limit,
+            'offset': offset,
+            'user_filter': user_filter,
+        },
     )
     return response
 
 
-@app.get("/jobs/{job_id}", response_class=HTMLResponse)
+@app.get('/jobs/{job_id}', response_class=HTMLResponse)
 async def details(request: Request, session: SessionDep, job_id: int = 0):
     job = job_service.get_job(session, job_id)
 
     if not job:
-        raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail="Job not found")
+        raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail='Job not found')
 
     portfolio_path, trades_path = job_results_paths(job.id)
     portfolio = pd.read_csv(portfolio_path)
@@ -72,8 +79,8 @@ async def details(request: Request, session: SessionDep, job_id: int = 0):
 
     return templates.TemplateResponse(
         request=request,
-        name="details.html.jinja",
-        context={"job": job, "portfolio": portfolio, "trades": trades},
+        name='details.html.jinja',
+        context={'job': job, 'portfolio': portfolio, 'trades': trades},
     )
 
 
@@ -90,17 +97,17 @@ class JobFormData(BaseModel):
     switching_cost: float
 
 
-@app.post("/")
+@app.post('/')
 async def model(data: Annotated[JobFormData, Form()], session: SessionDep):
-    start_date = datetime.strptime(data.start_date, "%Y-%m")
-    end_date = datetime.strptime(data.end_date, "%Y-%m")
+    start_date = datetime.strptime(data.start_date, '%Y-%m')
+    end_date = datetime.strptime(data.end_date, '%Y-%m')
 
     job = schemas.JobCreate(
         start_year=start_date.year,
         start_month=start_date.month,
         end_year=end_date.year,
         end_month=end_date.month,
-        tickers=data.tickers,
+        tickers=clear_tickers_list(data.tickers),
         safe_asset=data.safe_asset,
         initial_investment=data.initial_investment,
         rebalance_period=data.rebalance_period,
@@ -129,3 +136,7 @@ def job_results_paths(job_id: int) -> tuple[str, str]:
     portfolio_path = f'./static/results/{job_id}-portfolio.csv'
     trades_path = f'./static/results/{job_id}-trades.csv'
     return portfolio_path, trades_path
+
+
+def clear_tickers_list(tickers: str) -> str:
+    return ','.join([t.strip() for t in tickers.split(',')])
