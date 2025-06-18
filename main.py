@@ -46,12 +46,13 @@ async def index(request: Request):
 
 @app.get('/jobs', response_class=HTMLResponse)
 async def jobs(request: Request, session: SessionDep, page: int = 0, user_filter: str | None = None):
-    limit = 20
+    limit = 10
     offset = page * limit
+    user_filter = user_filter or None
     jobs = job_service.get_jobs_paginated(session, limit, offset, user_filter)
     count = job_service.count_jobs(session, user_filter)
 
-    response = templates.TemplateResponse(
+    return templates.TemplateResponse(
         request=request,
         name='jobs.html.jinja',
         context={
@@ -63,7 +64,6 @@ async def jobs(request: Request, session: SessionDep, page: int = 0, user_filter
             'user_filter': user_filter,
         },
     )
-    return response
 
 
 @app.get('/jobs/{job_id}', response_class=HTMLResponse)

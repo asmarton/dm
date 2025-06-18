@@ -1,12 +1,12 @@
 <section id="jobs" class="my-6">
     <h2 class="text-2xl font-bold mb-3">Past jobs</h2>
 
-    <form class="my-3" hx-get="{{ url_for('jobs') }}" hx-swap="outerHTML" hx-target="#jobs">
+    <form class="my-3" hx-get="/jobs" hx-swap="outerHTML" hx-target="#jobs">
         <label for="user_filter">User filter</label>
         <input id="user_filter" name="user_filter" type="text" value="{{ user_filter if user_filter else '' }}">
 
         <button type="submit">Filter</button>
-        <button type="button" hx-get="{{ url_for('jobs') }}" hx-swap="outerHTML" hx-target="#jobs">Clear</button>
+        <button type="button" hx-get="/jobs" hx-swap="outerHTML" hx-target="#jobs">Clear</button>
     </form>
 
     <table>
@@ -56,9 +56,9 @@
     </table>
 
     <div style="margin-top: 1rem;">
-        <button hx-get="{{ url_for('jobs').include_query_params(page=page - 1, user_filter=user_filter) }}" hx-swap="outerHTML" hx-target="#jobs" {% if page == 0 %}disabled{% endif %}>Prev</button>
+        <button hx-get="/jobs/?page={{ page - 1 }}&user_filter={{ user_filter if user_filter else '' }}" hx-swap="outerHTML" hx-target="#jobs" {% if page == 0 %}disabled{% endif %}>Prev</button>
         <span>Page {{ page + 1 }}/{{ (count / limit)|round(0, 'floor')|int + 1 }}</span>
-        <button hx-get="{{ url_for('jobs').include_query_params(page=page + 1, user_filter=user_filter) }}" hx-swap="outerHTML" hx-target="#jobs" {% if page * limit + jobs|length >= count %}disabled{% endif %}>Next</button>
+        <button hx-get="/jobs?page={{ page + 1 }}&user_filter={{ user_filter if user_filter else '' }}" hx-swap="outerHTML" hx-target="#jobs" {% if page * limit + jobs|length >= count %}disabled{% endif %}>Next</button>
         <span>Total {{ count }} jobs</span>
     </div>
 </section>
