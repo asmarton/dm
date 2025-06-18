@@ -1,4 +1,5 @@
 import logging
+import re
 from datetime import datetime
 from http import HTTPStatus
 from typing import Annotated
@@ -80,10 +81,21 @@ async def details(request: Request, session: SessionDep, job_id: int = 0):
     portfolio.index = portfolio.index + 1
     trades.index = trades.index + 1
 
+    drawdowns = pd.DataFrame()
+    for col in portfolio.columns:
+        col_search = re.search(r'(.*) Balance', col)
+        if col_search:
+            asset = col_search.group(1)
+            balance_col = f'{asset} Balance'
+            running_max = portfolio[balance_col].cummax()
+            drawdown_pct = (portfolio[balance_col] - running_max) / running_max * 100
+            mdd = drawdown_pct.min()
+            drawdowns[f'{asset} Maximum Drawdown'] = [f'{round(mdd, 2)}%']
+
     return templates.TemplateResponse(
         request=request,
         name='details.html.jinja',
-        context={'job': job, 'portfolio': portfolio, 'trades': trades},
+        context={'job': job, 'portfolio': portfolio, 'trades': trades, 'drawdowns': drawdowns},
     )
 
 
@@ -104,6 +116,10 @@ class JobFormData(BaseModel):
 async def model(data: Annotated[JobFormData, Form()], session: SessionDep):
     start_date = datetime.strptime(data.start_date, '%Y-%m')
     end_date = datetime.strptime(data.end_date, '%Y-%m')
+
+    tickers_regex = r'^(\w+\s*,\s*)+(\w+)$'
+    if not re.match(tickers_regex, data.tickers):
+        raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail='Invalid tickers')
 
     job = schemas.JobCreate(
         start_year=start_date.year,
@@ -141,5 +157,9 @@ def job_results_paths(job_id: int) -> tuple[str, str]:
     return portfolio_path, trades_path
 
 
+def tickers_to_list(tickers: str) -> list[str]:
+    return [t.strip() for t in tickers.split(',')]
+
+
 def clear_tickers_list(tickers: str) -> str:
-    return ','.join([t.strip() for t in tickers.split(',')])
+    return ','.join(tickers_to_list(tickers))

@@ -54,6 +54,11 @@
             <h2 class="text-2xl font-bold mb-4">Trades</h2>
             {{ trades.to_html() | safe }}
         </section>
+
+        <section>
+            <h2 class="text-2xl font-bold mb-4">Drawdown</h2>
+            {{ drawdowns.to_html() | safe }}
+        </section>
     </div>
 
     <script type="module">
