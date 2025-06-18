@@ -23,11 +23,32 @@ def get_tbills(job: JobBase, index: pd.DataFrame) -> pd.DataFrame:
     return t_bills
 
 
+tbill_etf = 'BIL'
+
+
+def rebalance(idx: int, market_closes: pd.DataFrame, rf_closes: pd.DataFrame, job: JobBase) -> str:
+    market_returns = (
+        market_closes.iloc[idx] / market_closes.iloc[idx - job.lookback_period]
+    ) - 1
+    rf_returns = (rf_closes.iloc[idx] / rf_closes.iloc[idx - job.lookback_period]) - 1
+
+    # Relative momentum
+    best_asset = market_returns.idxmax()
+
+    am_asset = job.single_absolute_momentum or best_asset
+    # Absolute momentum
+    if market_returns[am_asset] > rf_returns[tbill_etf]:
+        selected_asset = best_asset
+    else:
+        selected_asset = job.safe_asset
+    return selected_asset
+
+
 def dual_momentum(job: JobBase) -> tuple[pd.DataFrame, pd.DataFrame]:
     tickers = [t.strip() for t in job.tickers.split(',') if t.strip()]
 
     start = datetime.strptime(f'{job.start_year}-{job.start_month:02}-01', '%Y-%m-%d') - relativedelta(
-        months=job.lookback_period
+        months=job.lookback_period + 1
     )
     start = start.strftime('%Y-%m-%d')
     end = f'{job.end_year}-{job.end_month:02}-01'
@@ -35,17 +56,29 @@ def dual_momentum(job: JobBase) -> tuple[pd.DataFrame, pd.DataFrame]:
     if job.lookback_period < job.rebalance_period:
         raise RuntimeError('Lookback period cannot be less than rebalancing period')
 
-    tbill_etf = 'BIL'
     all_assets = tickers + [job.safe_asset, tbill_etf]
     prices = yf.download(tickers=all_assets, start=start, end=end, auto_adjust=True)['Close']
-    monthly_prices = prices.resample('ME').last()
-    monthly_returns = monthly_prices.pct_change().fillna(0)
+    monthly_closes = prices.groupby(pd.Grouper(freq='ME')).nth(-1)
 
-    monthly_prices_market = monthly_prices.drop(columns=[job.safe_asset, tbill_etf])
-    monthly_prices_bil = monthly_prices[[tbill_etf]]
+    monthly_closes_market = monthly_closes.drop(columns=[job.safe_asset, tbill_etf])
+    monthly_closes_bil = monthly_closes[[tbill_etf]]
+
+    trades = pd.DataFrame(columns=['Trade Date', 'Sold', 'Bought'])
+
+    # Entry
+    selected_asset = rebalance(job.lookback_period, monthly_closes_market, monthly_closes_bil, job)
+    trades.loc[len(trades)] = [monthly_closes.index[job.lookback_period], '', selected_asset]
+
+    monthly_closes = monthly_closes.iloc[1:]
+    monthly_closes_market = monthly_closes_market.iloc[1:]
+    monthly_closes_bil = monthly_closes_bil.iloc[1:]
+    monthly_returns = monthly_closes.pct_change().fillna(0)
+
+    balance = job.initial_investment
+    switched = False
 
     portfolio = pd.DataFrame(
-        index=monthly_prices.index,
+        index=monthly_closes.index,
         columns=[
             'Selected Asset',
             'Dual Momentum Return',
@@ -53,51 +86,24 @@ def dual_momentum(job: JobBase) -> tuple[pd.DataFrame, pd.DataFrame]:
             'Dual Momentum Balance',
         ],
     )
-    selected_asset = tickers[0]
-    trades = pd.DataFrame(columns=['Trade Date', 'Sold', 'Bought'])
-    month_start = monthly_prices.index[job.lookback_period].replace(day=1)
-    trades.loc[len(trades)] = [month_start, None, selected_asset]
 
-    balance = job.initial_investment
-    for i in range(job.lookback_period, len(monthly_prices)):
-        date = monthly_prices.index[i]
-        month_start = date.replace(day=1)
+    # Rebalancing is made at the end of the month.
+    for i in range(job.lookback_period, len(monthly_closes)):
+        date = monthly_closes.index[i]
+
+        asset_return = monthly_closes.at[date, selected_asset] / monthly_closes.iloc[i - 1][selected_asset] - 1
+        switching_cost = 0 if not switched else job.switching_cost / 100
+        balance = balance * (1 - switching_cost) * (1 + asset_return)
+
+        portfolio.iloc[i] = [selected_asset, asset_return, switching_cost, balance]
 
         switched = False
         if (i - job.lookback_period) % job.rebalance_period == 0:
-            market_lookback_return = (
-                monthly_prices_market.iloc[i] / monthly_prices_market.iloc[i - job.lookback_period]
-            ) - 1
-            bil_lookback_return = (monthly_prices_bil.iloc[i] / monthly_prices_bil.iloc[i - job.lookback_period]) - 1
-
-            # Relative momentum
-            best_asset = market_lookback_return.idxmax()
-
-            am_asset = job.single_absolute_momentum or best_asset
-            # Absolute momentum
-            if market_lookback_return[am_asset] > bil_lookback_return[tbill_etf]:
-                if selected_asset != best_asset:
-                    trades.loc[len(trades)] = [month_start, selected_asset, best_asset]
-                    switched = True
-                selected_asset = best_asset
-            else:
-                if selected_asset != job.safe_asset:
-                    trades.loc[len(trades)] = [
-                        month_start,
-                        selected_asset,
-                        job.safe_asset,
-                    ]
-                    switched = True
-                selected_asset = job.safe_asset
-
-        if pd.notna(monthly_prices.at[date, selected_asset]):
-            asset_return = monthly_prices.at[date, selected_asset] / monthly_prices.iloc[i - 1][selected_asset] - 1
-        else:
-            asset_return = 0
-
-        sc = 0 if not switched else job.switching_cost / 100
-        balance = balance * (1 - sc) * (1 + asset_return)
-        portfolio.iloc[i] = [selected_asset, asset_return, sc, balance]
+            new_asset = rebalance(i, monthly_closes_market, monthly_closes_bil, job)
+            if new_asset != selected_asset:
+                trades.loc[len(trades)] = [date, selected_asset, new_asset]
+                switched = True
+            selected_asset = new_asset
 
     # Cut portfolio to real start date.
     portfolio = portfolio[job.lookback_period :]
