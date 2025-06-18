@@ -77,6 +77,9 @@ async def details(request: Request, session: SessionDep, job_id: int = 0):
     portfolio = pd.read_csv(portfolio_path)
     trades = pd.read_csv(trades_path)
 
+    portfolio.index = portfolio.index + 1
+    trades.index = trades.index + 1
+
     return templates.TemplateResponse(
         request=request,
         name='details.html.jinja',
