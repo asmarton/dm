@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta
 
+import numpy as np
 import pandas as pd
 import pandas_datareader as pdr
 import requests_cache
@@ -92,6 +93,7 @@ def dual_momentum(job: JobBase) -> tuple[pd.DataFrame, pd.DataFrame]:
         date = monthly_closes.index[i]
 
         asset_return = monthly_closes.at[date, selected_asset] / monthly_closes.iloc[i - 1][selected_asset] - 1
+        asset_return = 0 if np.isnan(asset_return) else asset_return
         switching_cost = 0 if not switched else job.switching_cost / 100
         balance = balance * (1 - switching_cost) * (1 + asset_return)
 
