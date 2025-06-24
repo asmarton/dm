@@ -32,6 +32,8 @@ def rebalance(idx: int, market_closes: pd.DataFrame, rf_closes: pd.DataFrame, jo
         market_closes.iloc[idx] / market_closes.iloc[idx - job.lookback_period]
     ) - 1
     rf_returns = (rf_closes.iloc[idx] / rf_closes.iloc[idx - job.lookback_period]) - 1
+    market_returns = market_returns.fillna(0)
+    rf_returns = rf_returns.fillna(0)
 
     # Relative momentum
     best_asset = market_returns.idxmax()
