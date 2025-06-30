@@ -1,5 +1,6 @@
 import json
 import logging
+import pathlib
 import re
 from datetime import datetime
 from http import HTTPStatus
@@ -79,9 +80,12 @@ async def details(request: Request, session: SessionDep, job_id: int = 0):
     portfolio_path, trades_path, ticker_info_path = job_results_paths(job.id)
     portfolio = pd.read_csv(portfolio_path)
     trades = pd.read_csv(trades_path)
-    with open(ticker_info_path) as f:
-        ticker_info_json = json.load(f)
-    ticker_info = [dm.TickerInfo(**ticker_info) for ticker_info in ticker_info_json]
+    if pathlib.Path(ticker_info_path).exists():
+        with open(ticker_info_path) as f:
+            ticker_info_json = json.load(f)
+        ticker_info = [dm.TickerInfo(**ticker_info) for ticker_info in ticker_info_json]
+    else:
+        ticker_info = []
 
     portfolio.index = portfolio.index + 1
     trades.index = trades.index + 1
