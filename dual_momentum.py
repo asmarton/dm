@@ -1,8 +1,10 @@
+import pathlib
 from datetime import datetime
 
 import pandas as pd
 from dateutil.relativedelta import relativedelta
 from pydantic import BaseModel
+import yfinance as yf
 
 from db.schemas import JobBase
 
@@ -41,8 +43,13 @@ fallbacks = {
 
 
 def compute_monthly_returns(ticker: str) -> tuple[pd.DataFrame, TickerInfo]:
-    prices = pd.read_csv(f'data/{ticker}.csv', thousands=',').dropna().set_index('Date')
-    prices.index = pd.to_datetime(prices.index)
+    if pathlib.Path(f'data/{ticker}.csv').exists():
+        prices = pd.read_csv(f'data/{ticker}.csv', thousands=',').dropna().set_index('Date')
+        prices.index = pd.to_datetime(prices.index)
+    else:
+        prices = yf.download(tickers=[ticker], period='max', auto_adjust=True)['Close']
+        prices.to_csv(f'data/{ticker}.csv')
+
     monthly_closes = prices.groupby(pd.Grouper(freq='ME')).nth(-1)
     monthly_returns = monthly_closes.pct_change()
     ticker_info = TickerInfo(symbol=ticker, start_date=monthly_returns.index[0])

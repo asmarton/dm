@@ -127,27 +127,6 @@ class JobFormData(BaseModel):
     switching_cost: float
 
 
-allowed_tickers = {
-    'SPY',
-    '^SPX',
-    'QQQ',
-    '^IXIC',
-    'AGG',
-    'VBMFX',
-    'VEU',
-    'ARGT',
-    'EIS',
-    'EWC',
-    'EWG',
-    'EWJ',
-    'EWL',
-    'EWP',
-    'EWZ',
-    'GREK',
-    'MCHI',
-}
-
-
 @app.post('/')
 async def model(data: Annotated[JobFormData, Form()], session: SessionDep):
     start_date = datetime.strptime(data.start_date, '%Y-%m')
@@ -156,11 +135,6 @@ async def model(data: Annotated[JobFormData, Form()], session: SessionDep):
     tickers_regex = r'^(\w+\s*,\s*)+(\w+)$'
     if not re.match(tickers_regex, data.tickers):
         raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail='Invalid tickers')
-
-    tickers = dm.tickers_to_list(data.tickers)
-    for ticker in tickers:
-        if ticker not in allowed_tickers:
-            raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=f'Invalid ticker: {ticker}')
 
     job = schemas.JobCreate(
         start_year=start_date.year,
@@ -176,10 +150,13 @@ async def model(data: Annotated[JobFormData, Form()], session: SessionDep):
         single_absolute_momentum=data.single_absolute_momentum if data.single_absolute_momentum else None,
         user=data.user,
     )
-    job = job_service.create_job(session, job)
 
     portfolio, trades, ticker_info = dm.dual_momentum(job)
     portfolio = dm.humanize_portfolio(portfolio)
+
+    job.start_year = portfolio.index[0].year
+    job.start_month = portfolio.index[0].month
+    job = job_service.create_job(session, job)
 
     portfolio_path, trades_path, ticker_info_path = job_results_paths(job.id)
     with open(portfolio_path, 'w') as f:
