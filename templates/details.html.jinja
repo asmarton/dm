@@ -50,10 +50,35 @@
             {{ portfolio.to_html() | safe }}
         </section>
 
-        <section>
-            <h2 class="text-2xl font-bold mb-4">Trades</h2>
-            {{ trades.to_html() | safe }}
-        </section>
+        <div class="flex flex-wrap gap-6">
+            <section>
+                <h2 class="text-2xl font-bold mb-4">Trades</h2>
+                {{ trades.to_html() | safe }}
+            </section>
+            <section>
+                <h2 class="text-2xl font-bold mb-4">Asset Info</h2>
+                <ul class="list-disc">
+                    {% for info in ticker_info %}
+                        <li class="mx-4">
+                            <p class="text-lg font-bold">{{ info.symbol }}</p>
+                            <p>Data available since: {{ info.start_date.strftime('%Y-%m-%d') }}</p>
+                            {% if info.fallbacks %}
+                                <p>Fallbacks:</p>
+                                <ul class="list-[circle]">
+                                    {% for fallback in info.fallbacks %}
+                                        <li class="mx-4">
+                                            <p class="font-semibold">{{ fallback.symbol }}</p>
+                                            <p>Data available since: {{ fallback.start_date.strftime('%Y-%m-%d') }}</p>
+                                        </li>
+                                    {% endfor %}
+                                </ul>
+                            {% endif %}
+                        </li>
+                    {% endfor %}
+                </ul>
+            </section>
+        </div>
+
 
         <section>
             <h2 class="text-2xl font-bold mb-4">Drawdown</h2>

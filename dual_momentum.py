@@ -1,54 +1,94 @@
-from datetime import datetime, timedelta
+from datetime import datetime
 
-import numpy as np
 import pandas as pd
-import pandas_datareader as pdr
-import requests_cache
-import yfinance as yf
 from dateutil.relativedelta import relativedelta
+from pydantic import BaseModel
 
 from db.schemas import JobBase
 
 
-def get_tbills(job: JobBase, index: pd.DataFrame) -> pd.DataFrame:
-    pdr_expire_after = timedelta(days=1)
-    pdr_session = requests_cache.CachedSession(cache_name='fred_cache', backend='sqlite', expire_after=pdr_expire_after)
-
-    t_bills = pdr.data.DataReader('TB3MS', 'fred', start='1934-01-01', session=pdr_session)
-    t_bills = t_bills.rename(columns={'TB3MS': 'TBillRate'}) / 100
-    t_bills = t_bills.reindex(index, method='ffill')
-    t_bills['Lookback Return'] = (
-        t_bills['TBillRate'].rolling(window=job.lookback_period).mean() / 12 * job.lookback_period
-    )
-
-    return t_bills
+tbills_symbol = 'DGS3MO'
 
 
-tbill_etf = 'BIL'
+class TickerInfo(BaseModel):
+    symbol: str
+    start_date: datetime
+    fallbacks: list['TickerInfo'] | None = None
 
 
-def rebalance(idx: int, market_closes: pd.DataFrame, rf_closes: pd.DataFrame, job: JobBase) -> str:
-    market_returns = (
-        market_closes.iloc[idx] / market_closes.iloc[idx - job.lookback_period]
-    ) - 1
-    rf_returns = (rf_closes.iloc[idx] / rf_closes.iloc[idx - job.lookback_period]) - 1
-    market_returns = market_returns.fillna(0)
-    rf_returns = rf_returns.fillna(0)
+def get_tbills() -> pd.DataFrame:
+    dgs3mo = pd.read_csv(f'data/{tbills_symbol}.csv').dropna().set_index('Date')
+    dgs3mo.index = pd.to_datetime(dgs3mo.index)
+    tbill_yield = dgs3mo.groupby(pd.Grouper(freq='ME')).nth(-1)
+    tbill_monthly_return = (1 + tbill_yield / 100) ** (1 / 12) - 1
+    return tbill_monthly_return
 
+
+def tickers_to_list(tickers: str) -> list[str]:
+    return [t.strip() for t in tickers.split(',')]
+
+
+def clear_tickers_list(tickers: str) -> str:
+    return ','.join(tickers_to_list(tickers))
+
+
+fallbacks = {
+    'SPY': ['^SPX'],
+    'VEU': ['MSCI ACWI ex US', 'MSCI World ex US'],
+    'AGG': ['VBMFX'],
+    'QQQ': ['^IXIC'],
+}
+
+
+def compute_monthly_returns(ticker: str) -> tuple[pd.DataFrame, TickerInfo]:
+    prices = pd.read_csv(f'data/{ticker}.csv', thousands=',').dropna().set_index('Date')
+    prices.index = pd.to_datetime(prices.index)
+    monthly_closes = prices.groupby(pd.Grouper(freq='ME')).nth(-1)
+    monthly_returns = monthly_closes.pct_change()
+    ticker_info = TickerInfo(symbol=ticker, start_date=monthly_returns.index[0])
+    return monthly_returns, ticker_info
+
+
+def compute_monthly_prices_with_fallback(ticker: str) -> tuple[pd.DataFrame, TickerInfo]:
+    monthly_returns, ticker_info = compute_monthly_returns(ticker)
+    monthly_returns.dropna(inplace=True)
+    if ticker in fallbacks:
+        ticker_info.fallbacks = []
+        for fallback in fallbacks[ticker]:
+            fb_returns, fb_ticker_info = compute_monthly_returns(fallback)
+            earliest_index = monthly_returns.index[0]
+            kept_fb = fb_returns[fb_returns.index < earliest_index].rename(columns={fallback: ticker})
+            monthly_returns = pd.concat([kept_fb, monthly_returns])
+            ticker_info.fallbacks.append(fb_ticker_info)
+    return monthly_returns, ticker_info
+
+
+def rebalance(
+    idx: int,
+    market_lookback_returns: pd.DataFrame,
+    tbills_lookback_returns: pd.DataFrame,
+    sam_lookback_returns: pd.DataFrame | None,
+    job: JobBase,
+) -> str:
+    market_returns = market_lookback_returns.iloc[idx]
+    tbills_returns = tbills_lookback_returns.iloc[idx]
     # Relative momentum
     best_asset = market_returns.idxmax()
 
     am_asset = job.single_absolute_momentum or best_asset
+    if job.single_absolute_momentum and job.single_absolute_momentum not in market_returns:
+        market_returns = pd.concat([market_returns, sam_lookback_returns])
+
     # Absolute momentum
-    if market_returns[am_asset] > rf_returns[tbill_etf]:
+    if market_returns[am_asset] > tbills_returns[tbills_symbol]:
         selected_asset = best_asset
     else:
         selected_asset = job.safe_asset
     return selected_asset
 
 
-def dual_momentum(job: JobBase) -> tuple[pd.DataFrame, pd.DataFrame]:
-    tickers = [t.strip() for t in job.tickers.split(',') if t.strip()]
+def dual_momentum(job: JobBase) -> tuple[pd.DataFrame, pd.DataFrame, list[TickerInfo]]:
+    tickers = tickers_to_list(job.tickers)
 
     start = datetime.strptime(f'{job.start_year}-{job.start_month:02}-01', '%Y-%m-%d') - relativedelta(
         months=job.lookback_period + 1
@@ -59,29 +99,58 @@ def dual_momentum(job: JobBase) -> tuple[pd.DataFrame, pd.DataFrame]:
     if job.lookback_period < job.rebalance_period:
         raise RuntimeError('Lookback period cannot be less than rebalancing period')
 
-    all_assets = tickers + [job.safe_asset, tbill_etf]
-    prices = yf.download(tickers=all_assets, start=start, end=end, auto_adjust=True)['Close']
-    monthly_closes = prices.groupby(pd.Grouper(freq='ME')).nth(-1)
+    monthly_returns = pd.DataFrame(columns=['Date'], index=pd.DatetimeIndex([]))
+    monthly_returns.set_index('Date', inplace=True)
 
-    monthly_closes_market = monthly_closes.drop(columns=[job.safe_asset, tbill_etf])
-    monthly_closes_bil = monthly_closes[[tbill_etf]]
+    all_tickers = tickers + [job.safe_asset]
+    if job.single_absolute_momentum is not None:
+        all_tickers = all_tickers + [job.single_absolute_momentum]
+    all_tickers = list(set(all_tickers))
+
+    ticker_info: list[TickerInfo] = []
+
+    for ticker in all_tickers:
+        ticker_monthly_returns, info = compute_monthly_prices_with_fallback(ticker)
+        ticker_info.append(info)
+        monthly_returns = pd.merge(monthly_returns, ticker_monthly_returns, on='Date', how='outer')
+
+    tbills_monthly_returns = get_tbills()
+    ticker_info.append(TickerInfo(symbol='DGS3MO', start_date=tbills_monthly_returns.index[0]))
+
+    monthly_returns = pd.merge(monthly_returns, tbills_monthly_returns, on='Date', how='outer')
+    monthly_returns = monthly_returns.ffill().dropna().groupby(pd.Grouper(freq='ME')).nth(-1)
+    monthly_returns = monthly_returns.loc[start:end]
+
+    lookback_returns = (1 + monthly_returns).rolling(job.lookback_period).apply(lambda x: x.prod()) - 1
+
+    market_lookback_returns = lookback_returns[tickers]
+    sam_lookback_returns = (
+        lookback_returns[job.single_absolute_momentum] if job.single_absolute_momentum is not None else None
+    )
+    tbills_lookback_returns = lookback_returns[[tbills_symbol]]
+    tbills_monthly_returns = monthly_returns[[tbills_symbol]]
 
     trades = pd.DataFrame(columns=['Trade Date', 'Sold', 'Bought'])
 
     # Entry
-    selected_asset = rebalance(job.lookback_period, monthly_closes_market, monthly_closes_bil, job)
-    trades.loc[len(trades)] = [monthly_closes.index[job.lookback_period], '', selected_asset]
+    selected_asset = rebalance(
+        job.lookback_period, market_lookback_returns, tbills_lookback_returns, sam_lookback_returns, job
+    )
 
-    monthly_closes = monthly_closes.iloc[1:]
-    monthly_closes_market = monthly_closes_market.iloc[1:]
-    monthly_closes_bil = monthly_closes_bil.iloc[1:]
-    monthly_returns = monthly_closes.pct_change().fillna(0)
+    trades.loc[len(trades)] = [monthly_returns.index[job.lookback_period], '', selected_asset]
+
+    # Remove first month to correctly align with start date. We only needed an extra month to compute first entry.
+    monthly_returns = monthly_returns.iloc[1:]
+    lookback_returns = lookback_returns.iloc[1:]
+    market_lookback_returns = market_lookback_returns.iloc[1:]
+    sam_lookback_returns = sam_lookback_returns.iloc[1:] if sam_lookback_returns is not None else None
+    tbills_lookback_returns = tbills_lookback_returns.iloc[1:]
 
     balance = job.initial_investment
     switched = False
 
     portfolio = pd.DataFrame(
-        index=monthly_closes.index,
+        index=monthly_returns.index,
         columns=[
             'Selected Asset',
             'Dual Momentum Return',
@@ -91,11 +160,10 @@ def dual_momentum(job: JobBase) -> tuple[pd.DataFrame, pd.DataFrame]:
     )
 
     # Rebalancing is made at the end of the month.
-    for i in range(job.lookback_period, len(monthly_closes)):
-        date = monthly_closes.index[i]
+    for i in range(job.lookback_period, len(monthly_returns.index)):
+        date = monthly_returns.index[i]
 
-        asset_return = monthly_closes.at[date, selected_asset] / monthly_closes.iloc[i - 1][selected_asset] - 1
-        asset_return = 0 if np.isnan(asset_return) else asset_return
+        asset_return = monthly_returns.loc[date][selected_asset]
         switching_cost = 0 if not switched else job.switching_cost / 100
         balance = balance * (1 - switching_cost) * (1 + asset_return)
 
@@ -103,7 +171,7 @@ def dual_momentum(job: JobBase) -> tuple[pd.DataFrame, pd.DataFrame]:
 
         switched = False
         if (i - job.lookback_period) % job.rebalance_period == 0:
-            new_asset = rebalance(i, monthly_closes_market, monthly_closes_bil, job)
+            new_asset = rebalance(i, market_lookback_returns, tbills_lookback_returns, sam_lookback_returns, job)
             if new_asset != selected_asset:
                 trades.loc[len(trades)] = [date, selected_asset, new_asset]
                 switched = True
@@ -112,15 +180,19 @@ def dual_momentum(job: JobBase) -> tuple[pd.DataFrame, pd.DataFrame]:
     # Cut portfolio to real start date.
     portfolio = portfolio[job.lookback_period :]
 
-    for ticker in all_assets:
+    for ticker in all_tickers:
         portfolio[f'{ticker} Return'] = monthly_returns[ticker]
         portfolio[f'{ticker} Balance'] = job.initial_investment * (1 + portfolio[f'{ticker} Return']).cumprod()
+    portfolio[f'{tbills_symbol} Return'] = tbills_monthly_returns[tbills_symbol]
+    portfolio[f'{tbills_symbol} Balance'] = (
+        job.initial_investment * (1 + portfolio[f'{tbills_symbol} Return']).cumprod()
+    )
 
     portfolio = portfolio.infer_objects()
 
     trades.set_index('Trade Date', inplace=True)
 
-    return portfolio, trades
+    return portfolio, trades, ticker_info
 
 
 def humanize_portfolio(portfolio: pd.DataFrame) -> pd.DataFrame:

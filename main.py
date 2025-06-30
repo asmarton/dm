@@ -1,9 +1,11 @@
+import json
 import logging
 import re
 from datetime import datetime
 from http import HTTPStatus
 from typing import Annotated
 
+import fastapi.encoders
 from fastapi import FastAPI, Request, Form, Depends, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -12,9 +14,9 @@ from pydantic import BaseModel
 import pandas as pd
 
 import job_service
+import dual_momentum as dm
 from db import schemas
 from db.database import SessionLocal
-from dual_momentum import dual_momentum, humanize_portfolio
 
 
 def get_db_session():
@@ -74,9 +76,12 @@ async def details(request: Request, session: SessionDep, job_id: int = 0):
     if not job:
         raise HTTPException(status_code=HTTPStatus.NOT_FOUND, detail='Job not found')
 
-    portfolio_path, trades_path = job_results_paths(job.id)
+    portfolio_path, trades_path, ticker_info_path = job_results_paths(job.id)
     portfolio = pd.read_csv(portfolio_path)
     trades = pd.read_csv(trades_path)
+    with open(ticker_info_path) as f:
+        ticker_info_json = json.load(f)
+    ticker_info = [dm.TickerInfo(**ticker_info) for ticker_info in ticker_info_json]
 
     portfolio.index = portfolio.index + 1
     trades.index = trades.index + 1
@@ -95,7 +100,13 @@ async def details(request: Request, session: SessionDep, job_id: int = 0):
     return templates.TemplateResponse(
         request=request,
         name='details.html.jinja',
-        context={'job': job, 'portfolio': portfolio, 'trades': trades, 'drawdowns': drawdowns},
+        context={
+            'job': job,
+            'portfolio': portfolio,
+            'trades': trades,
+            'drawdowns': drawdowns,
+            'ticker_info': ticker_info,
+        },
     )
 
 
@@ -112,6 +123,27 @@ class JobFormData(BaseModel):
     switching_cost: float
 
 
+allowed_tickers = {
+    'SPY',
+    '^SPX',
+    'QQQ',
+    '^IXIC',
+    'AGG',
+    'VBMFX',
+    'VEU',
+    'ARGT',
+    'EIS',
+    'EWC',
+    'EWG',
+    'EWJ',
+    'EWL',
+    'EWP',
+    'EWZ',
+    'GREK',
+    'MCHI',
+}
+
+
 @app.post('/')
 async def model(data: Annotated[JobFormData, Form()], session: SessionDep):
     start_date = datetime.strptime(data.start_date, '%Y-%m')
@@ -121,12 +153,17 @@ async def model(data: Annotated[JobFormData, Form()], session: SessionDep):
     if not re.match(tickers_regex, data.tickers):
         raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail='Invalid tickers')
 
+    tickers = dm.tickers_to_list(data.tickers)
+    for ticker in tickers:
+        if ticker not in allowed_tickers:
+            raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=f'Invalid ticker: {ticker}')
+
     job = schemas.JobCreate(
         start_year=start_date.year,
         start_month=start_date.month,
         end_year=end_date.year,
         end_month=end_date.month,
-        tickers=clear_tickers_list(data.tickers),
+        tickers=dm.clear_tickers_list(data.tickers),
         safe_asset=data.safe_asset,
         initial_investment=data.initial_investment,
         rebalance_period=data.rebalance_period,
@@ -137,29 +174,24 @@ async def model(data: Annotated[JobFormData, Form()], session: SessionDep):
     )
     job = job_service.create_job(session, job)
 
-    portfolio, trades = dual_momentum(job)
-    portfolio = humanize_portfolio(portfolio)
+    portfolio, trades, ticker_info = dm.dual_momentum(job)
+    portfolio = dm.humanize_portfolio(portfolio)
 
-    portfolio_path, trades_path = job_results_paths(job.id)
+    portfolio_path, trades_path, ticker_info_path = job_results_paths(job.id)
     with open(portfolio_path, 'w') as f:
         f.write(portfolio.to_csv())
     with open(trades_path, 'w') as f:
         f.write(trades.to_csv())
+    with open(ticker_info_path, 'w') as f:
+        f.write(json.dumps(ticker_info, default=fastapi.encoders.jsonable_encoder))
 
     response = RedirectResponse('/', status_code=HTTPStatus.FOUND)
     response.set_cookie(key='user', value=data.user, path='/', max_age=2592000)
     return response
 
 
-def job_results_paths(job_id: int) -> tuple[str, str]:
+def job_results_paths(job_id: int) -> tuple[str, str, str]:
     portfolio_path = f'./static/results/{job_id}-portfolio.csv'
     trades_path = f'./static/results/{job_id}-trades.csv'
-    return portfolio_path, trades_path
-
-
-def tickers_to_list(tickers: str) -> list[str]:
-    return [t.strip() for t in tickers.split(',')]
-
-
-def clear_tickers_list(tickers: str) -> str:
-    return ','.join(tickers_to_list(tickers))
+    ticker_info_path = f'./static/results/{job_id}-ticker-info.json'
+    return portfolio_path, trades_path, ticker_info_path
