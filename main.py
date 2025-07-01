@@ -48,6 +48,63 @@ async def index(request: Request):
     )
 
 
+class JobFormData(BaseModel):
+    user: str
+    start_date: str
+    end_date: str
+    initial_investment: float
+    tickers: str
+    single_absolute_momentum: str | None = None
+    safe_asset: str
+    rebalance_period: int
+    lookback_period: int
+    switching_cost: float
+
+
+@app.post('/')
+async def model(data: Annotated[JobFormData, Form()], session: SessionDep):
+    start_date = datetime.strptime(data.start_date, '%Y-%m')
+    end_date = datetime.strptime(data.end_date, '%Y-%m')
+
+    tickers_regex = r'^(\w+\s*,\s*)+(\w+)$'
+    if not re.match(tickers_regex, data.tickers):
+        raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail='Invalid tickers')
+
+    job = schemas.JobCreate(
+        start_year=start_date.year,
+        start_month=start_date.month,
+        end_year=end_date.year,
+        end_month=end_date.month,
+        tickers=dm.clear_tickers_list(data.tickers),
+        safe_asset=data.safe_asset,
+        initial_investment=data.initial_investment,
+        rebalance_period=data.rebalance_period,
+        lookback_period=data.lookback_period,
+        switching_cost=data.switching_cost,
+        single_absolute_momentum=data.single_absolute_momentum if data.single_absolute_momentum else None,
+        user=data.user,
+    )
+
+    portfolio, trades, ticker_info = dm.dual_momentum(job)
+    portfolio = dm.humanize_portfolio(portfolio)
+
+    job.start_year = portfolio.index[0].year
+    job.start_month = portfolio.index[0].month
+    job = job_service.create_job(session, job)
+
+    portfolio_path, trades_path, ticker_info_path = job_results_paths(job.id)
+    with open(portfolio_path, 'w') as f:
+        f.write(portfolio.to_csv())
+    with open(trades_path, 'w') as f:
+        f.write(trades.to_csv())
+    with open(ticker_info_path, 'w') as f:
+        f.write(json.dumps(ticker_info, default=fastapi.encoders.jsonable_encoder))
+
+    response = RedirectResponse('/', status_code=HTTPStatus.FOUND)
+    response.set_cookie(key='user', value=data.user, path='/', max_age=2592000)
+    return response
+
+
 @app.get('/jobs', response_class=HTMLResponse)
 async def jobs(request: Request, session: SessionDep, page: int = 0, user_filter: str | None = None):
     limit = 10
@@ -114,65 +171,18 @@ async def details(request: Request, session: SessionDep, job_id: int = 0):
     )
 
 
-class JobFormData(BaseModel):
-    user: str
-    start_date: str
-    end_date: str
-    initial_investment: float
-    tickers: str
-    single_absolute_momentum: str | None = None
-    safe_asset: str
-    rebalance_period: int
-    lookback_period: int
-    switching_cost: float
-
-
-@app.post('/')
-async def model(data: Annotated[JobFormData, Form()], session: SessionDep):
-    start_date = datetime.strptime(data.start_date, '%Y-%m')
-    end_date = datetime.strptime(data.end_date, '%Y-%m')
-
-    tickers_regex = r'^(\w+\s*,\s*)+(\w+)$'
-    if not re.match(tickers_regex, data.tickers):
-        raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail='Invalid tickers')
-
-    job = schemas.JobCreate(
-        start_year=start_date.year,
-        start_month=start_date.month,
-        end_year=end_date.year,
-        end_month=end_date.month,
-        tickers=dm.clear_tickers_list(data.tickers),
-        safe_asset=data.safe_asset,
-        initial_investment=data.initial_investment,
-        rebalance_period=data.rebalance_period,
-        lookback_period=data.lookback_period,
-        switching_cost=data.switching_cost,
-        single_absolute_momentum=data.single_absolute_momentum if data.single_absolute_momentum else None,
-        user=data.user,
-    )
-
-    portfolio, trades, ticker_info = dm.dual_momentum(job)
-    portfolio = dm.humanize_portfolio(portfolio)
-
-    job.start_year = portfolio.index[0].year
-    job.start_month = portfolio.index[0].month
-    job = job_service.create_job(session, job)
-
-    portfolio_path, trades_path, ticker_info_path = job_results_paths(job.id)
-    with open(portfolio_path, 'w') as f:
-        f.write(portfolio.to_csv())
-    with open(trades_path, 'w') as f:
-        f.write(trades.to_csv())
-    with open(ticker_info_path, 'w') as f:
-        f.write(json.dumps(ticker_info, default=fastapi.encoders.jsonable_encoder))
-
-    response = RedirectResponse('/', status_code=HTTPStatus.FOUND)
-    response.set_cookie(key='user', value=data.user, path='/', max_age=2592000)
-    return response
-
-
 def job_results_paths(job_id: int) -> tuple[str, str, str]:
     portfolio_path = f'./static/results/{job_id}-portfolio.csv'
     trades_path = f'./static/results/{job_id}-trades.csv'
     ticker_info_path = f'./static/results/{job_id}-ticker-info.json'
     return portfolio_path, trades_path, ticker_info_path
+
+
+@app.get('/trend-following', response_class=HTMLResponse)
+async def trend_following(request: Request):
+    user = request.cookies.get('user')
+    return templates.TemplateResponse(
+        request=request,
+        name='trend-following.html.jinja',
+        context={'user': user},
+    )

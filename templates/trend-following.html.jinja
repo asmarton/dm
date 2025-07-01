@@ -1,0 +1,46 @@
+{% extends "layout.html.jinja" %}
+
+{% block main %}
+    <h1 class="text-4xl font-bold mb-4">Trend Following</h1>
+    <form method="post" action="/trend-following" class="max-w-[30rem] grid grid-cols-[auto_1fr] gap-y-2 gap-x-4 items-center">
+        <label for="user">User*</label>
+        <input id="user" name="user" type="text" required value="{{ user if user else '' }}">
+
+        <label for="start_date">Start Date*</label>
+        <input id="start_date" name="start_date" type="month" value="2000-01" required>
+
+        <label for="end_date">End Date*</label>
+        <input id="end_date" name="end_date" type="month" value="2025-06" required>
+
+        <label for="initial_investment">Initial Amount*</label>
+        <input id="initial_investment" name="initial_investment" type="number" step=".01" value="10000" required>
+
+        <label for="tickers">Tickers (comma separated)*</label>
+        <input id="tickers" name="tickers" type="text" required>
+
+        <label for="upper_period">Upper band period (days)*</label>
+        <input id="upper_period" name="upper_period" type="number" min="1" value="20" required>
+
+        <label for="lower_period">Lower band period (days)*</label>
+        <input id="lower_period" name="lower_period" type="number" min="1" value="40" required>
+
+        <label for="max_leverage">Max Leverage (%)*</label>
+        <input id="max_leverage" name="max_leverage" type="number" min="100" value="100" step="0.01" required>
+
+        <label for="target_volatility">Target Volatility (%)*</label>
+        <input id="target_volatility" name="target_volatility" type="number" min="100" value="100" step="0.01" required>
+
+        <label for="rebalance_threshold">Rebalance Threshold (%)*</label>
+        <input id="rebalance_threshold" name="rebalance_threshold" type="number" min="100" value="100" step="0.01" required>
+
+        <label for="cost_per_share">Cost per share ($)*</label>
+        <input id="cost_per_share" name="cost_per_share" type="number" min="0" value="0" step="0.00001" required>
+
+        <label for="min_trade_cost">Min trade cost ($)*</label>
+        <input id="min_trade_cost" name="min_trade_cost" type="number" min="0" value="0" step="0.00001" required>
+
+        <button>Compute</button>
+    </form>
+
+    <p class="font-bold text-amber-700 underline text-3xl my-6">WORK IN PROGRESS</p>
+{% endblock %}
