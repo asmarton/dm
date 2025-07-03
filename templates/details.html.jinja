@@ -90,6 +90,6 @@
         import '/static/dist/chart.js';
 
         const portfolio = {{ portfolio.set_index('Date').to_json(orient='split')|safe }};
-        setupChart(document.getElementById('chart-container'), portfolio);
+        setupDualMomentumChart(document.getElementById('chart-container'), portfolio);
     </script>
 {% endblock %}

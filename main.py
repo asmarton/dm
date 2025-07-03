@@ -7,7 +7,7 @@ from http import HTTPStatus
 from typing import Annotated
 
 import fastapi.encoders
-from fastapi import FastAPI, Request, Form, Depends, HTTPException
+from fastapi import FastAPI, Request, Form, Depends, HTTPException, Query
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -16,6 +16,7 @@ import pandas as pd
 
 import job_service
 import dual_momentum as dm
+import industry_trends as it
 from db import schemas
 from db.database import SessionLocal
 
@@ -178,11 +179,23 @@ def job_results_paths(job_id: int) -> tuple[str, str, str]:
     return portfolio_path, trades_path, ticker_info_path
 
 
-@app.get('/trend-following', response_class=HTMLResponse)
+@app.get('/industry-trends', response_class=HTMLResponse)
 async def trend_following(request: Request):
     user = request.cookies.get('user')
     return templates.TemplateResponse(
         request=request,
-        name='trend-following.html.jinja',
-        context={'user': user},
+        name='industry-trends.html.jinja',
+        context={'user': user, 'etfs': it.etfs},
+    )
+
+
+@app.get('/industry-trends/results', response_class=HTMLResponse)
+async def trend_following(request: Request, query: Annotated[it.TrendFollowingJob, Query()]):
+    user = request.cookies.get('user')
+    results = it.trend_following_strategy(query)
+    balance = pd.concat([results.equity, results.holdings, results.cash, results.borrowed], axis=1).rename(columns={0: 'Equity', 1: 'Holdings', 2: 'Cash', 3: 'Borrowed'})
+    return templates.TemplateResponse(
+        request=request,
+        name='industry-trends.html.jinja',
+        context={'user': user, 'etfs': it.etfs, 'results': results, 'balance': balance, 'query': query},
     )
