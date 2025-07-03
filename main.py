@@ -193,9 +193,24 @@ async def trend_following(request: Request):
 async def trend_following(request: Request, query: Annotated[it.TrendFollowingJob, Query()]):
     user = request.cookies.get('user')
     results = it.trend_following_strategy(query)
+
     balance = pd.concat([results.equity, results.holdings, results.cash, results.borrowed], axis=1).rename(columns={0: 'Equity', 1: 'Holdings', 2: 'Cash', 3: 'Borrowed'})
+
+    monthly_returns = pd.DataFrame(results.equity.groupby(pd.Grouper(freq='ME')).nth(-1).pct_change() * 100).rename(columns={0: 'Return'})
+    monthly_returns.index.name = 'Date'
+    monthly_returns['Year'] = monthly_returns.index.year
+    monthly_returns['Month'] = monthly_returns.index.month
+    monthly_returns = monthly_returns.pivot(index='Year', columns='Month', values='Return')
+    monthly_returns.columns = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+    monthly_returns.fillna('', inplace=True)
+
+    trades = results.shares.diff().fillna(0)
+    trades = trades.loc[~(trades==0).all(axis=1)]
+    trades_count = trades.astype(bool).sum().sum()
+
     return templates.TemplateResponse(
         request=request,
         name='industry-trends.html.jinja',
-        context={'user': user, 'etfs': it.etfs, 'results': results, 'balance': balance, 'query': query},
+        context={'user': user, 'etfs': it.etfs, 'query': query, 'results': results, 'balance': balance, 'monthly_returns': monthly_returns, 'trades': trades, 'trades_count': trades_count},
     )

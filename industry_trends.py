@@ -67,9 +67,9 @@ class TrendFollowingResults:
 
 
 def trend_following_strategy(job: TrendFollowingJob) -> TrendFollowingResults:
-    job.max_leverage = job.max_leverage / 100
-    job.target_volatility = job.target_volatility / 100
-    job.rebalance_threshold = job.rebalance_threshold / 100
+    max_leverage = job.max_leverage / 100
+    target_volatility = job.target_volatility / 100
+    rebalance_threshold = job.rebalance_threshold / 100
 
     price_dfs = []
     for ticker in job.tickers:
@@ -165,15 +165,15 @@ def trend_following_strategy(job: TrendFollowingJob) -> TrendFollowingResults:
             if active[j]:
                 sigma = volatility[j].iloc[t]
                 if pd.notna(sigma) and sigma > 0:
-                    w = (job.target_volatility / n_active) / sigma
+                    w = (target_volatility / n_active) / sigma
                     weights_today[j] = w
                 else:
                     weights_today[j] = 0
             else:
                 weights_today[j] = 0
         exposure = sum(weights_today.values())
-        if exposure > job.max_leverage:
-            scaling_factor = job.max_leverage / exposure
+        if exposure > max_leverage:
+            scaling_factor = max_leverage / exposure
             for j in weights_today:
                 weights_today[j] *= scaling_factor
         weights[date] = weights_today
@@ -192,7 +192,7 @@ def trend_following_strategy(job: TrendFollowingJob) -> TrendFollowingResults:
                 amount = (weights_today[j] - before_rebalance_weights[j]) * equity
                 bought_shares = amount / prices.loc[prev_date, j]
                 pct_change_shares = bought_shares / shares[prev_date][j] if shares[prev_date][j] > 0 else +math.inf
-                if pct_change_shares >= job.rebalance_threshold:
+                if pct_change_shares >= rebalance_threshold:
                     shares[date][j] = shares[prev_date][j] + bought_shares
                     fees = max(job.trade_cost_min, job.trade_cost_per_share * bought_shares)
                     tx_costs[date] += fees
@@ -205,7 +205,7 @@ def trend_following_strategy(job: TrendFollowingJob) -> TrendFollowingResults:
                 amount = (before_rebalance_weights[j] - weights_today[j]) * equity
                 sold_shares = amount / prices.loc[prev_date, j]
                 pct_change_shares = sold_shares / shares[prev_date][j] if shares[prev_date][j] > 0 else +math.inf
-                if pct_change_shares >= job.rebalance_threshold:
+                if pct_change_shares >= rebalance_threshold:
                     shares[date][j] = shares[prev_date][j] - sold_shares
                     fees = max(job.trade_cost_min, job.trade_cost_per_share * sold_shares)
                     tx_costs[date] += fees
@@ -221,7 +221,7 @@ def trend_following_strategy(job: TrendFollowingJob) -> TrendFollowingResults:
         else:
             borrowed[date] += max(0, -trade_balance - cash[date])
             cash[date] = max(0, cash[date] + trade_balance)
-        equity = (prices.loc[date] * pd.Series(shares[date])).fillna(0).sum() + cash[date] - borrowed[date]
+        # equity = (prices.loc[date] * pd.Series(shares[date])).fillna(0).sum() + cash[date] - borrowed[date]
         # print(f'- Cash: {cash[date]} | Borrowed: {borrowed[date]} | Holdings: {(prices.loc[date] * pd.Series(shares[date])).fillna(0).sum()} | Equity: {equity} | Exposure: {sum(weights_today.values())} | Leverage: {(equity + borrowed[date]) / equity}')
     weights = pd.DataFrame.from_dict(weights, orient='index')
     positions = pd.DataFrame.from_dict(positions, orient='index')

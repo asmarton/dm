@@ -7,53 +7,85 @@
 {#        <input id="user" name="user" type="text" required value="{{ user if user else '' }}">#}
 
         <label for="start_date">Start Date*</label>
-        <input id="start_date" name="start_date" type="date" value="2020-01-01" required>
+        <input id="start_date" name="start_date" type="date" value="{{ query.start_date.strftime('%Y-%m-%d') if query }}" min="2002-01-01" max="2025-07-01" required>
 
         <label for="end_date">End Date*</label>
-        <input id="end_date" name="end_date" type="date" value="2025-06-01" required>
+        <input id="end_date" name="end_date" type="date" value="{{ query.end_date.strftime('%Y-%m-%d') if query }}" min="2002-01-01" max="2025-07-01" required>
 
         <label for="initial_balance">Initial Amount*</label>
-        <input id="initial_balance" name="initial_balance" type="number" step=".01" value="100000" required>
+        <input id="initial_balance" name="initial_balance" type="number" step=".01" value="{{ query.initial_balance if query else 100000 }}" required>
 
         <label for="tickers">Tickers*</label>
         <select id="tickers" name="tickers" multiple required>
             {% for etf in etfs %}
-                <option value="{{ etf }}">{{ etf }}</option>
+                <option value="{{ etf }}" {{ 'selected' if query and etf in query.tickers }}>{{ etf }}</option>
             {% endfor %}
         </select>
 
         <label for="up_period">Upper band period (days)*</label>
-        <input id="up_period" name="up_period" type="number" min="1" value="20" required>
+        <input id="up_period" name="up_period" type="number" min="1" value="{{ query.up_period if query else 20 }}" required>
 
         <label for="down_period">Lower band period (days)*</label>
-        <input id="down_period" name="down_period" type="number" min="1" value="40" required>
+        <input id="down_period" name="down_period" type="number" min="1" value="{{ query.down_period if query else 40 }}" required>
 
         <label for="max_leverage">Max Leverage (%)*</label>
-        <input id="max_leverage" name="max_leverage" type="number" min="100" value="200" step="0.01" required>
+        <input id="max_leverage" name="max_leverage" type="number" min="100" value="{{ query.max_leverage if query else 200 }}" step="0.01" required>
 
         <label for="target_volatility">Target Volatility (%)*</label>
-        <input id="target_volatility" name="target_volatility" type="number" min="0" value="1.5" step="0.01" required>
+        <input id="target_volatility" name="target_volatility" type="number" min="0" value="{{ query.target_volatility if query else 1.5 }}" step="0.01" required>
 
         <label for="rebalance_threshold">Rebalance Threshold (%)*</label>
-        <input id="rebalance_threshold" name="rebalance_threshold" type="number" min="0" value="10" step="0.01" required>
+        <input id="rebalance_threshold" name="rebalance_threshold" type="number" min="0" value="{{ query.rebalance_threshold if query else 10 }}" step="0.01" required>
 
         <label for="trade_cost_per_share">Cost per share ($)*</label>
-        <input id="trade_cost_per_share" name="trade_cost_per_share" type="number" min="0" value="0.0035" step="0.00001" required>
+        <input id="trade_cost_per_share" name="trade_cost_per_share" type="number" min="0" value="{{ query.trade_cost_per_share if query else 0.0035 }}" step="0.00001" required>
 
         <label for="trade_cost_min">Min trade cost ($)*</label>
-        <input id="trade_cost_min" name="trade_cost_min" type="number" min="0" value="0.35" step="0.00001" required>
+        <input id="trade_cost_min" name="trade_cost_min" type="number" min="0" value="{{ query.trade_cost_min if query else 0.35 }}" step="0.00001" required>
 
         <button>Compute</button>
     </form>
 
     {% if results %}
-        <div id="chart-container" class="w-full h-[25rem]"></div>
+        <section class="my-4">
+            <h2 class="text-2xl font-bold mb-4">Performance</h2>
+            <div id="chart-container" class="w-full h-[25rem]"></div>
+        </section>
+
+        <section class="my-4">
+            <h2 class="text-2xl font-bold mb-4">Returns</h2>
+            {{ monthly_returns.to_html(index_names=False, table_id='returns') | safe }}
+        </section>
+
+        <section class="my-4">
+            <h2 class="text-2xl font-bold mb-4">Trades ({{ trades_count }})</h2>
+
+            {{ trades.to_html(index_names=False, table_id='trades') | safe }}
+        </section>
 
         <script type="module">
             import '/static/dist/chart.js';
 
             const portfolio = {{ balance.to_json(orient='split')|safe }};
             setupIndustryTrendsChart(document.getElementById('chart-container'), portfolio);
+
+            function colorPositivity(el) {
+              const amount = +el.innerHTML;
+              if (amount > 0) {
+                el.style.color = 'green';
+              } else if (amount < 0) {
+                el.style.color = 'red';
+              } else {
+                el.style.color = 'darkgray';
+              }
+            }
+
+            document.querySelectorAll('#returns tbody td').forEach((cell) => {
+              colorPositivity(cell);
+            });
+            document.querySelectorAll('#trades tbody td').forEach((cell) => {
+              colorPositivity(cell);
+            });
         </script>
     {% endif %}
 {% endblock %}
