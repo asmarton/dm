@@ -203,6 +203,7 @@ async def trend_following(request: Request, query: Annotated[it.TrendFollowingJo
     monthly_returns = monthly_returns.pivot(index='Year', columns='Month', values='Return')
     monthly_returns.columns = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
                         'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+    monthly_returns['Yearly'] = ((1 + monthly_returns / 100).prod(axis=1) - 1) * 100
     monthly_returns.fillna('', inplace=True)
 
     trades = results.shares.diff().fillna(0)
