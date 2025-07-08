@@ -80,7 +80,7 @@
       setupIndustryTrendsChart(document.getElementById('chart-container'), portfolio);
 
       function colorPositivity(el) {
-        const amount = +el.innerHTML;
+        const amount = parseFloat(el.innerHTML);
         if (amount > 0) {
           el.style.color = 'green';
         } else if (amount < 0) {

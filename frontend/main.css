@@ -31,4 +31,8 @@ a {
     & > thead > tr:first-child > th {
         @apply sticky top-0 z-[2] bg-white shadow-[inset_0_1px_0_black,_inset_0_-1px_0_black];
     }
+
+    & td {
+        white-space: nowrap;
+    }
 }

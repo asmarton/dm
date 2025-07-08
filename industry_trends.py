@@ -1,5 +1,5 @@
 import pathlib
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import pandas as pd
 import numpy as np
@@ -44,6 +44,7 @@ class TrendFollowingResults:
     monthly_returns: pd.DataFrame
     trades: pd.DataFrame
     drawdowns: pd.DataFrame
+    signals: pd.DataFrame
     channels: pd.DataFrame
     keltner_channels: pd.DataFrame
     donchian_channels: pd.DataFrame
@@ -54,11 +55,14 @@ def trend_following_strategy(job: schemas.IndustryTrendsJobBase) -> TrendFollowi
     target_volatility = job.target_volatility / 100
     rebalance_threshold = job.rebalance_threshold / 100
 
+    preparation_days = math.ceil(max(job.up_period, job.down_period, job.vol_window) * 8/5)
+    start_date = job.start_date - timedelta(days=preparation_days)
+
     price_dfs = []
     for ticker in job.tickers:
         price_dfs.append(utils.get_closing_prices(ticker))
     prices = pd.concat(price_dfs, axis='columns')
-    prices = prices[job.start_date:job.end_date]
+    prices = prices[start_date:job.end_date]
 
     cash = pd.Series(index=prices.index, data=0.0)
     borrowed = pd.Series(index=prices.index, data=0.0).to_dict()
@@ -71,6 +75,7 @@ def trend_following_strategy(job: schemas.IndustryTrendsJobBase) -> TrendFollowi
     weights = pd.DataFrame(index=prices.index, columns=prices.columns, data=0.0).to_dict(orient='index')
     positions = pd.DataFrame(index=prices.index, columns=prices.columns, data=False).to_dict(orient='index')
     shares = pd.DataFrame(index=prices.index, columns=prices.columns, data=0.0).to_dict(orient='index')
+    signals = pd.DataFrame(index=prices.index, columns=prices.columns, data=None).to_dict(orient='index')
 
     channels = dict()
     keltner_channels = dict()
@@ -94,9 +99,9 @@ def trend_following_strategy(job: schemas.IndustryTrendsJobBase) -> TrendFollowi
     upper_band = np.minimum(donchian_up, keltner_up)
     lower_band = np.maximum(donchian_down, keltner_down)
 
-    trailing_stop = [lower_band.iloc[0]]
+    trailing_stop = [lower_band.iloc[0].fillna(0)]
     for t in range(1, len(lower_band.index)):
-        trailing_stop_t = np.maximum(trailing_stop[t - 1], lower_band.iloc[t])
+        trailing_stop_t = np.maximum(trailing_stop[t - 1], lower_band.iloc[t].fillna(0))
         trailing_stop.append(trailing_stop_t)
     trailing_stop = pd.DataFrame(index=lower_band.index, columns=lower_band.columns, data=trailing_stop)
 
@@ -104,6 +109,7 @@ def trend_following_strategy(job: schemas.IndustryTrendsJobBase) -> TrendFollowi
         channels[(j, 'down')] = lower_band[j]
         channels[(j, 'price')] = prices[j]
         channels[(j, 'up')] = upper_band[j]
+        channels[(j, 'stop')] = trailing_stop[j]
         keltner_channels[(j, 'down')] = keltner_down[j]
         keltner_channels[(j, 'price')] = prices[j]
         keltner_channels[(j, 'up')] = keltner_up[j]
@@ -111,14 +117,19 @@ def trend_following_strategy(job: schemas.IndustryTrendsJobBase) -> TrendFollowi
         donchian_channels[(j, 'price')] = prices[j]
         donchian_channels[(j, 'up')] = donchian_up[j]
 
-    cash.iloc[:max(job.up_period, job.down_period, job.vol_window)] = job.initial_balance
+    channels = pd.DataFrame.from_dict(channels)
+    keltner_channels = pd.DataFrame.from_dict(keltner_channels)
+    donchian_channels = pd.DataFrame.from_dict(donchian_channels)
+
+    cash.iloc[:preparation_days] = job.initial_balance
+
 
     # EOD: prices, channels, bands, trailing stops. These are computed for the end of the day, because they are derived from close prices.
     # SOD: positions, weights. These are computed for the start of the day. We use t - 1 EOD data to get t SOD positions and weights.
     # This means that at the end of day t - 1 we figure out what trades we need to execute the following morning. After the trades are executed
     # positions and weights for day t become reality. At the end of the t day, when evaluating the portfolio, we use the t positions and weights.
 
-    for t in range(max(job.up_period, job.down_period, job.vol_window), len(prices)):
+    for t in range(preparation_days, len(prices)):
         date = prices.index[t]
         # print(f'* Day {t} - {date}')
         prev_date = prices.index[t - 1]
@@ -129,12 +140,24 @@ def trend_following_strategy(job: schemas.IndustryTrendsJobBase) -> TrendFollowi
             prev_price = prices[j].iloc[t - 1]
 
             # Entry condition
-            if not prev_position and prev_price >= upper_band[j].iloc[t - 1]:
+            if not prev_position and prev_price >= upper_band[j].iloc[t - 1] and prev_price > trailing_stop[j].iloc[t - 1]:
                 positions[date][j] = True
+                signal = '+'
+                if prev_price >= donchian_channels[j, 'up'].iloc[t - 1]:
+                    signal += 'D'
+                if prev_price >= keltner_channels[j, 'up'].iloc[t - 1]:
+                    signal += 'K'
+                signals[date][j] = signal
             # Exit condition
             elif prev_position:
                 if prev_price < trailing_stop[j].iloc[t - 1]:
                     positions[date][j] = False
+                    signal = '-'
+                    if prev_price < donchian_channels[j, 'down'].iloc[t - 1]:
+                        signal += 'D'
+                    if prev_price < keltner_channels[j, 'down'].iloc[t - 1]:
+                        signal += 'K'
+                    signals[date][j] = signal
                 else:
                     positions[date][j] = True
             else:
@@ -212,25 +235,20 @@ def trend_following_strategy(job: schemas.IndustryTrendsJobBase) -> TrendFollowi
     cash = pd.Series(cash)
     borrowed = pd.Series(borrowed)
     tx_costs = pd.Series(tx_costs)
-    channels = pd.DataFrame.from_dict(channels)
-    keltner_channels = pd.DataFrame.from_dict(keltner_channels)
-    donchian_channels = pd.DataFrame.from_dict(donchian_channels)
 
     holdings = (shares * prices).fillna(0).sum(axis=1)
     equity = holdings + cash - borrowed
 
-    benchmark_prices = utils.get_closing_prices(job.benchmark)[job.start_date:job.end_date]
+    benchmark_prices = utils.get_closing_prices(job.benchmark)[start_date:job.end_date]
     benchmark_balance = (benchmark_prices.pct_change() + 1).fillna(1).cumprod() * job.initial_balance
     balance = pd.concat([equity, holdings, cash, borrowed, benchmark_balance], axis=1).rename(columns={0: 'Equity', 1: 'Holdings', 2: 'Cash', 3: 'Borrowed'})
     balance.index.name = 'Date'
 
     benchmark_returns = pd.DataFrame(benchmark_prices.groupby(pd.Grouper(freq='ME')).nth(-1).pct_change() * 100).rename(
         columns={job.benchmark: 'Return'})
-    print(benchmark_returns.columns)
     benchmark_returns.index.name = 'Date'
     benchmark_returns['Year'] = benchmark_returns.index.year
     benchmark_returns['Month'] = benchmark_returns.index.month
-    print(benchmark_returns.columns)
     benchmark_returns = benchmark_returns.pivot(index='Year', columns='Month', values='Return')
     benchmark_returns = ((1 + benchmark_returns / 100).prod(axis=1) - 1) * 100
 
@@ -240,16 +258,28 @@ def trend_following_strategy(job: schemas.IndustryTrendsJobBase) -> TrendFollowi
     monthly_returns['Year'] = monthly_returns.index.year
     monthly_returns['Month'] = monthly_returns.index.month
     monthly_returns = monthly_returns.pivot(index='Year', columns='Month', values='Return')
-    monthly_returns.columns = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-                               'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+    month_names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+    if len(monthly_returns.columns) < 12:
+        kept_months = []
+        for i in range(0, 12):
+            if i in monthly_returns.columns:
+                kept_months.append(month_names[i])
+        monthly_returns.columns = kept_months
+    else:
+        monthly_returns.columns = month_names
     monthly_returns['Yearly'] = ((1 + monthly_returns / 100).prod(axis=1) - 1) * 100
     monthly_returns[f'Benchmark ({job.benchmark})'] = benchmark_returns
 
     trades = shares.diff().fillna(0)
     trades = trades.loc[~(trades == 0).all(axis=1)]
+    trades = trades.astype(str)
     trades.index.name = 'Date'
 
-    # TODO:
+    signals = pd.DataFrame.from_dict(signals, orient='index')
+    signals = ('(' + signals + ')').fillna('')
+    signals = signals.loc[~(signals == '').all(axis=1)]
+    trades = trades.astype(str) + ' ' + signals.reindex(trades.index).fillna('')
+
     drawdowns = pd.DataFrame()
     def compute_drawdown(col: str):
         running_max = balance[col].cummax()
@@ -260,22 +290,23 @@ def trend_following_strategy(job: schemas.IndustryTrendsJobBase) -> TrendFollowi
     drawdowns[f'Max {job.benchmark} Drawdown'] = [compute_drawdown(job.benchmark)]
 
     return TrendFollowingResults(
-        weights=weights,
-        positions=positions,
-        trailing_stop=trailing_stop,
-        cash=cash,
-        borrowed=borrowed,
-        shares=shares,
-        holdings=holdings,
-        equity=equity,
-        balance=balance,
-        tx_costs=tx_costs,
+        weights=weights[job.start_date:],
+        positions=positions[job.start_date:],
+        trailing_stop=trailing_stop[job.start_date:],
+        cash=cash[job.start_date:],
+        borrowed=borrowed[job.start_date:],
+        shares=shares[job.start_date:],
+        holdings=holdings[job.start_date:],
+        equity=equity[job.start_date:],
+        balance=balance[job.start_date:],
+        tx_costs=tx_costs[job.start_date:],
         monthly_returns=monthly_returns,
-        trades=trades,
+        trades=trades[job.start_date:],
         drawdowns=drawdowns,
-        channels=channels,
-        keltner_channels=keltner_channels,
-        donchian_channels=donchian_channels,
+        signals=signals[job.start_date:],
+        channels=channels[job.start_date:],
+        keltner_channels=keltner_channels[job.start_date:],
+        donchian_channels=donchian_channels[job.start_date:],
     )
 
 
