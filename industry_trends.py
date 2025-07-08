@@ -244,7 +244,6 @@ def trend_following_strategy(job: schemas.IndustryTrendsJobBase) -> TrendFollowi
                                'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
     monthly_returns['Yearly'] = ((1 + monthly_returns / 100).prod(axis=1) - 1) * 100
     monthly_returns[f'Benchmark ({job.benchmark})'] = benchmark_returns
-    monthly_returns.fillna('', inplace=True)
 
     trades = shares.diff().fillna(0)
     trades = trades.loc[~(trades == 0).all(axis=1)]
@@ -294,7 +293,7 @@ class JobViewModel:
 def load_results(job: schemas.IndustryTrendsJob) -> JobViewModel:
     it_results_dir = ROOT_DIR / 'static' / 'it_results'
     balance = pd.read_csv(it_results_dir / f'{job.id}-balance.csv').set_index('Date')
-    returns = pd.read_csv(it_results_dir / f'{job.id}-monthly_returns.csv').set_index('Year')
+    returns = pd.read_csv(it_results_dir / f'{job.id}-monthly_returns.csv').set_index('Year').fillna('')
     trades = pd.read_csv(it_results_dir / f'{job.id}-trades.csv').set_index('Date')
     drawdowns = pd.read_csv(it_results_dir / f'{job.id}-drawdowns.csv')
 

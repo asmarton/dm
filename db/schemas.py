@@ -37,11 +37,11 @@ class IndustryTrendsJobBase(BaseModel):
     up_period: int = 20
     down_period: int = 40
     vol_window: int = 14
-    max_leverage: float = 2
-    target_volatility: float = 0.015
+    max_leverage: float = 200
+    target_volatility: float = 1.5
     trade_cost_per_share: float = 0.0035
     trade_cost_min: float = 0.35
-    rebalance_threshold: float = 0.1
+    rebalance_threshold: float = 10
     benchmark: str
     user: str = Field(min_length=1)
 
