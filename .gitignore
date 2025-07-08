@@ -195,6 +195,7 @@ cython_debug/
 .cursorindexingignore
 
 /static/results
+/static/it_results
 *.db
 *.sqlite
 node_modules

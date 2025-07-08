@@ -1,13 +1,19 @@
+import json
 import pathlib
+import re
 from datetime import datetime
 
+import fastapi.encoders
 import pandas as pd
 from dateutil.relativedelta import relativedelta
 from pydantic import BaseModel
-import yfinance as yf
+from dataclasses import dataclass
 
+import db.models
+import db.schemas as schemas
+import utils
 from db.schemas import JobBase
-
+from utils import ROOT_DIR
 
 tbills_symbol = 'DGS3MO'
 
@@ -19,19 +25,12 @@ class TickerInfo(BaseModel):
 
 
 def get_tbills() -> pd.DataFrame:
-    dgs3mo = pd.read_csv(f'data/{tbills_symbol}.csv').dropna().set_index('Date')
+    path = pathlib.Path(ROOT_DIR) / 'data' / f'{tbills_symbol}.csv'
+    dgs3mo = pd.read_csv(path).dropna().set_index('Date')
     dgs3mo.index = pd.to_datetime(dgs3mo.index)
     tbill_yield = dgs3mo.groupby(pd.Grouper(freq='ME')).nth(-1)
     tbill_monthly_return = (1 + tbill_yield / 100) ** (1 / 12) - 1
     return tbill_monthly_return
-
-
-def tickers_to_list(tickers: str) -> list[str]:
-    return [t.strip() for t in tickers.split(',')]
-
-
-def clear_tickers_list(tickers: str) -> str:
-    return ','.join(tickers_to_list(tickers))
 
 
 fallbacks = {
@@ -43,13 +42,7 @@ fallbacks = {
 
 
 def compute_monthly_returns(ticker: str) -> tuple[pd.DataFrame, TickerInfo]:
-    if pathlib.Path(f'data/{ticker}.csv').exists():
-        prices = pd.read_csv(f'data/{ticker}.csv', thousands=',').dropna().set_index('Date')
-        prices.index = pd.to_datetime(prices.index)
-    else:
-        prices = yf.download(tickers=[ticker], period='max', auto_adjust=True)['Close']
-        prices.to_csv(f'data/{ticker}.csv')
-
+    prices = utils.get_closing_prices(ticker)
     monthly_closes = prices.groupby(pd.Grouper(freq='ME')).nth(-1)
     monthly_returns = monthly_closes.pct_change()
     ticker_info = TickerInfo(symbol=ticker, start_date=monthly_returns.index[0])
@@ -94,8 +87,15 @@ def rebalance(
     return selected_asset
 
 
-def dual_momentum(job: JobBase) -> tuple[pd.DataFrame, pd.DataFrame, list[TickerInfo]]:
-    tickers = tickers_to_list(job.tickers)
+@dataclass
+class DualMomentumResults:
+    portfolio: pd.DataFrame
+    trades: pd.DataFrame
+    ticker_info: list[TickerInfo]
+
+
+def dual_momentum(job: JobBase) -> DualMomentumResults:
+    tickers = utils.tickers_to_list(job.tickers)
 
     start = datetime.strptime(f'{job.start_year}-{job.start_month:02}-01', '%Y-%m-%d') - relativedelta(
         months=job.lookback_period + 1
@@ -199,7 +199,7 @@ def dual_momentum(job: JobBase) -> tuple[pd.DataFrame, pd.DataFrame, list[Ticker
 
     trades.set_index('Trade Date', inplace=True)
 
-    return portfolio, trades, ticker_info
+    return DualMomentumResults(portfolio, trades, ticker_info)
 
 
 def humanize_portfolio(portfolio: pd.DataFrame) -> pd.DataFrame:
@@ -212,3 +212,63 @@ def humanize_portfolio(portfolio: pd.DataFrame) -> pd.DataFrame:
             portfolio[col] = (portfolio[col] * 100).round(2).astype(str) + '%'
 
     return portfolio
+
+
+def job_results_paths(job_id: int) -> tuple[str, str, str]:
+    results_dir = ROOT_DIR / 'static' / 'results'
+    portfolio_path = results_dir / f'{job_id}-portfolio.csv'
+    trades_path = results_dir / f'{job_id}-trades.csv'
+    ticker_info_path = results_dir/ f'{job_id}-ticker-info.json'
+    return portfolio_path, trades_path, ticker_info_path
+
+
+def save_results(job_id: int, results: DualMomentumResults):
+    portfolio = humanize_portfolio(results.portfolio)
+    portfolio_path, trades_path, ticker_info_path = job_results_paths(job_id)
+    portfolio.to_csv(portfolio_path)
+    results.trades.to_csv(trades_path)
+    with open(ticker_info_path, 'w') as f:
+        f.write(json.dumps(results.ticker_info, default=fastapi.encoders.jsonable_encoder))
+
+
+@dataclass
+class JobViewModel:
+    job: schemas.Job
+    portfolio: pd.DataFrame
+    trades: pd.DataFrame
+    drawdowns: pd.DataFrame
+    ticker_info: list[TickerInfo]
+
+
+def load_results(job: schemas.Job) -> JobViewModel:
+    portfolio_path, trades_path, ticker_info_path = job_results_paths(job.id)
+    portfolio = pd.read_csv(portfolio_path)
+    trades = pd.read_csv(trades_path)
+    if pathlib.Path(ticker_info_path).exists():
+        with open(ticker_info_path) as f:
+            ticker_info_json = json.load(f)
+        ticker_info = [TickerInfo(**ticker_info) for ticker_info in ticker_info_json]
+    else:
+        ticker_info = []
+
+    portfolio.index = portfolio.index + 1
+    trades.index = trades.index + 1
+
+    drawdowns = pd.DataFrame()
+    for col in portfolio.columns:
+        col_search = re.search(r'(.*) Balance', col)
+        if col_search:
+            asset = col_search.group(1)
+            balance_col = f'{asset} Balance'
+            running_max = portfolio[balance_col].cummax()
+            drawdown_pct = (portfolio[balance_col] - running_max) / running_max * 100
+            mdd = drawdown_pct.min()
+            drawdowns[f'{asset} Maximum Drawdown'] = [f'{round(mdd, 2)}%']
+
+    return JobViewModel(
+        job=job,
+        portfolio=portfolio,
+        trades=trades,
+        drawdowns=drawdowns,
+        ticker_info=ticker_info,
+    )

@@ -9,45 +9,24 @@ import math
 from dataclasses import dataclass
 from pydantic import BaseModel
 
+import utils
+from db import schemas
+from utils import ROOT_DIR
 
 etfs = ['XLF','XLK','XLE','XLV','XLI','XBI','XLU','XLP','XLY','KRE','XLB','XLC','XRT','XOP','XLRE','XHB','KBE','XME','KIE','XSD','XAR','XES','KCE','XNTK','XHE','XSW','XPH','XTN','XHS','XITK','XTL']
 
 
 def get_tbills() -> pd.DataFrame:
-    dgs1mo = pd.read_csv(f'./data/DGS1MO.csv').ffill().set_index('Date')
+    path = pathlib.Path(ROOT_DIR) / 'data' / 'DGS1MO.csv'
+    dgs1mo = pd.read_csv(path).ffill().set_index('Date')
     dgs1mo.index = pd.to_datetime(dgs1mo.index)
     trading_days = 252
     tbill_daily_return = (1 + dgs1mo / 100) ** (1 / trading_days) - 1
     return tbill_daily_return['DGS1MO']
 
 
-def get_ticker_data(ticker: str) -> pd.DataFrame:
-    if pathlib.Path(f'data/{ticker}.csv').exists():
-        prices = pd.read_csv(f'data/{ticker}.csv', thousands=',').dropna().set_index('Date')
-        prices.index = pd.to_datetime(prices.index)
-    else:
-        prices = yf.download(tickers=[ticker], period='max', auto_adjust=True)['Close']
-        prices.to_csv(f'data/{ticker}.csv')
-    return prices
-
-
 keltner_mult = 2
 atr_approx_factor = 1.4
-
-
-class TrendFollowingJob(BaseModel):
-    initial_balance: float = 100_000
-    start_date: datetime
-    end_date: datetime
-    tickers: list[str]
-    up_period: int = 20
-    down_period: int = 40
-    vol_window: int = 14
-    max_leverage: float = 2
-    target_volatility: float = 0.015
-    trade_cost_per_share: float = 0.0035
-    trade_cost_min: float = 0.35
-    rebalance_threshold: float = 0.1
 
 
 @dataclass
@@ -60,20 +39,24 @@ class TrendFollowingResults:
     shares: pd.DataFrame
     holdings: pd.DataFrame
     equity: pd.Series
+    balance: pd.DataFrame
     tx_costs: pd.Series
+    monthly_returns: pd.DataFrame
+    trades: pd.DataFrame
+    drawdowns: pd.DataFrame
     channels: pd.DataFrame
     keltner_channels: pd.DataFrame
     donchian_channels: pd.DataFrame
 
 
-def trend_following_strategy(job: TrendFollowingJob) -> TrendFollowingResults:
+def trend_following_strategy(job: schemas.IndustryTrendsJobBase) -> TrendFollowingResults:
     max_leverage = job.max_leverage / 100
     target_volatility = job.target_volatility / 100
     rebalance_threshold = job.rebalance_threshold / 100
 
     price_dfs = []
     for ticker in job.tickers:
-        price_dfs.append(get_ticker_data(ticker))
+        price_dfs.append(utils.get_closing_prices(ticker))
     prices = pd.concat(price_dfs, axis='columns')
     prices = prices[job.start_date:job.end_date]
 
@@ -236,6 +219,27 @@ def trend_following_strategy(job: TrendFollowingJob) -> TrendFollowingResults:
     holdings = (shares * prices).fillna(0).sum(axis=1)
     equity = holdings + cash - borrowed
 
+    balance = pd.concat([equity, holdings, cash, borrowed], axis=1).rename(columns={0: 'Equity', 1: 'Holdings', 2: 'Cash', 3: 'Borrowed'})
+    balance.index.name = 'Date'
+
+    monthly_returns = pd.DataFrame(equity.groupby(pd.Grouper(freq='ME')).nth(-1).pct_change() * 100).rename(
+        columns={0: 'Return'})
+    monthly_returns.index.name = 'Date'
+    monthly_returns['Year'] = monthly_returns.index.year
+    monthly_returns['Month'] = monthly_returns.index.month
+    monthly_returns = monthly_returns.pivot(index='Year', columns='Month', values='Return')
+    monthly_returns.columns = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                               'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+    monthly_returns['Yearly'] = ((1 + monthly_returns / 100).prod(axis=1) - 1) * 100
+    monthly_returns.fillna('', inplace=True)
+
+    trades = shares.diff().fillna(0)
+    trades = trades.loc[~(trades == 0).all(axis=1)]
+    trades.index.name = 'Date'
+
+    # TODO:
+    drawdowns = pd.DataFrame()
+
     return TrendFollowingResults(
         weights=weights,
         positions=positions,
@@ -245,8 +249,42 @@ def trend_following_strategy(job: TrendFollowingJob) -> TrendFollowingResults:
         shares=shares,
         holdings=holdings,
         equity=equity,
+        balance=balance,
         tx_costs=tx_costs,
+        monthly_returns=monthly_returns,
+        trades=trades,
+        drawdowns=drawdowns,
         channels=channels,
         keltner_channels=keltner_channels,
         donchian_channels=donchian_channels,
     )
+
+
+def save_results(id: int, results: TrendFollowingResults):
+    it_results_dir = ROOT_DIR / 'static' / 'it_results'
+    results.balance.to_csv(it_results_dir / f'{id}-balance.csv')
+    results.monthly_returns.to_csv(it_results_dir / f'{id}-monthly_returns.csv')
+    results.trades.to_csv(it_results_dir / f'{id}-trades.csv')
+    results.drawdowns.to_csv(it_results_dir / f'{id}-drawdowns.csv')
+
+
+@dataclass
+class JobViewModel:
+    job: schemas.IndustryTrendsJob
+    balance: pd.DataFrame
+    returns: pd.DataFrame
+    trades: pd.DataFrame
+    trades_count: int
+    drawdowns: pd.DataFrame
+
+
+def load_results(job: schemas.IndustryTrendsJob) -> JobViewModel:
+    it_results_dir = ROOT_DIR / 'static' / 'it_results'
+    balance = pd.read_csv(it_results_dir / f'{job.id}-balance.csv').set_index('Date')
+    returns = pd.read_csv(it_results_dir / f'{job.id}-monthly_returns.csv').set_index('Year')
+    trades = pd.read_csv(it_results_dir / f'{job.id}-trades.csv').set_index('Date')
+    drawdowns = pd.read_csv(it_results_dir / f'{job.id}-drawdowns.csv')
+
+    trades_count = trades.astype(bool).sum().sum()
+
+    return JobViewModel(job, balance, returns, trades, trades_count, drawdowns)

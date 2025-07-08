@@ -54,7 +54,7 @@ function setupIndustryTrendsChart(containerEl, portfolio) {
   for (let i = 0; i < portfolio.index.length; i++) {
     for (let j = 0; j < portfolio.columns.length; j++) {
       const column = portfolio.columns[j];
-      seriesData[column].push({ time: portfolio.index[i] / 1000, value: portfolio.data[i][j] });
+      seriesData[column].push({ time: portfolio.index[i], value: portfolio.data[i][j] });
     }
   }
 

@@ -1,0 +1,52 @@
+<section id="jobs" class="my-6">
+    <h2 class="text-2xl font-bold mb-3">Past jobs</h2>
+
+    <form class="my-3" hx-get="/industry-trends/jobs" hx-swap="outerHTML" hx-target="#jobs">
+        <label for="user_filter">User filter</label>
+        <input id="user_filter" name="user_filter" type="text" value="{{ user_filter if user_filter else '' }}">
+
+        <button type="submit">Filter</button>
+        <button type="button" hx-get="/industry-trends/jobs" hx-swap="outerHTML" hx-target="#jobs">Clear</button>
+    </form>
+
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>User</th>
+                <th>Details</th>
+                <th>Start</th>
+                <th>End</th>
+                <th>Initial Amt</th>
+                <th>Tickers</th>
+                <th>Created At</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for job in jobs %}
+                <tr>
+                    <td>{{ job.id }}</td>
+                    <td>{{ job.user }}</td>
+                    <td><a href="/industry-trends/jobs/{{ job.id }}">View</a></td>
+                    <td>{{ job.start_date.strftime('%Y-%m-%d') }}</td>
+                    <td>{{ job.end_date.strftime('%Y-%m-%d') }}</td>
+                    <td>${{ job.initial_balance }}</td>
+                    <td>{{ job.tickers }}</td>
+                    <td>{{ job.created_at }}</td>
+                </tr>
+            {% endfor %}
+            {% if jobs|length == 0 %}
+                <tr>
+                    <td colspan="14" style="text-align: center">No results.</td>
+                </tr>
+            {% endif %}
+        </tbody>
+    </table>
+
+    <div style="margin-top: 1rem;">
+        <button hx-get="/industry-trends/jobs/?page={{ page - 1 }}&user_filter={{ user_filter if user_filter else '' }}" hx-swap="outerHTML" hx-target="#jobs" {% if page == 0 %}disabled{% endif %}>Prev</button>
+        <span>Page {{ page + 1 }}/{{ (count / limit)|round(0, 'ceil')|int }}</span>
+        <button hx-get="/industry-trends/jobs?page={{ page + 1 }}&user_filter={{ user_filter if user_filter else '' }}" hx-swap="outerHTML" hx-target="#jobs" {% if page * limit + jobs|length >= count %}disabled{% endif %}>Next</button>
+        <span>Total {{ count }} jobs</span>
+    </div>
+</section>

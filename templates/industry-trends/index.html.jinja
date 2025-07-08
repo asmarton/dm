@@ -2,9 +2,9 @@
 
 {% block main %}
     <h1 class="text-4xl font-bold mb-4">Trend Following</h1>
-    <form method="get" action="/industry-trends/results" class="max-w-[30rem] grid grid-cols-[auto_1fr] gap-y-2 gap-x-4 items-center mb-6">
-{#        <label for="user">User*</label>#}
-{#        <input id="user" name="user" type="text" required value="{{ user if user else '' }}">#}
+    <form method="post" action="/industry-trends" class="max-w-[30rem] grid grid-cols-[auto_1fr] gap-y-2 gap-x-4 items-center mb-6">
+        <label for="user">User*</label>
+        <input id="user" name="user" type="text" required value="{{ user if user else '' }}">
 
         <label for="start_date">Start Date*</label>
         <input id="start_date" name="start_date" type="date" value="{{ query.start_date.strftime('%Y-%m-%d') if query }}" min="2002-01-01" max="2025-07-01" required>
@@ -46,46 +46,5 @@
         <button>Compute</button>
     </form>
 
-    {% if results %}
-        <section class="my-4">
-            <h2 class="text-2xl font-bold mb-4">Performance</h2>
-            <div id="chart-container" class="w-full h-[25rem]"></div>
-        </section>
-
-        <section class="my-4">
-            <h2 class="text-2xl font-bold mb-4">Returns</h2>
-            {{ monthly_returns.to_html(index_names=False, table_id='returns') | safe }}
-        </section>
-
-        <section class="my-4">
-            <h2 class="text-2xl font-bold mb-4">Trades ({{ trades_count }})</h2>
-
-            {{ trades.to_html(index_names=False, table_id='trades') | safe }}
-        </section>
-
-        <script type="module">
-            import '/static/dist/chart.js';
-
-            const portfolio = {{ balance.to_json(orient='split')|safe }};
-            setupIndustryTrendsChart(document.getElementById('chart-container'), portfolio);
-
-            function colorPositivity(el) {
-              const amount = +el.innerHTML;
-              if (amount > 0) {
-                el.style.color = 'green';
-              } else if (amount < 0) {
-                el.style.color = 'red';
-              } else {
-                el.style.color = 'darkgray';
-              }
-            }
-
-            document.querySelectorAll('#returns tbody td').forEach((cell) => {
-              colorPositivity(cell);
-            });
-            document.querySelectorAll('#trades tbody td').forEach((cell) => {
-              colorPositivity(cell);
-            });
-        </script>
-    {% endif %}
+    <section id="jobs" hx-trigger="load" hx-get="/industry-trends/jobs?page=0" hx-swap="outerHTML" hx-target="#jobs"></section>
 {% endblock %}
