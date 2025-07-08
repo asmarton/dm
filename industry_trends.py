@@ -251,6 +251,13 @@ def trend_following_strategy(job: schemas.IndustryTrendsJobBase) -> TrendFollowi
 
     # TODO:
     drawdowns = pd.DataFrame()
+    def compute_drawdown(col: str):
+        running_max = balance[col].cummax()
+        drawdown_pct = (balance[col] - running_max) / running_max * 100
+        mdd = drawdown_pct.min()
+        return f'{round(mdd, 2)}%'
+    drawdowns['Max Strategy Drawdown'] = [compute_drawdown('Equity')]
+    drawdowns[f'Max {job.benchmark} Drawdown'] = [compute_drawdown(job.benchmark)]
 
     return TrendFollowingResults(
         weights=weights,
@@ -277,7 +284,7 @@ def save_results(id: int, results: TrendFollowingResults):
     results.balance.to_csv(it_results_dir / f'{id}-balance.csv')
     results.monthly_returns.to_csv(it_results_dir / f'{id}-monthly_returns.csv')
     results.trades.to_csv(it_results_dir / f'{id}-trades.csv')
-    results.drawdowns.to_csv(it_results_dir / f'{id}-drawdowns.csv')
+    results.drawdowns.to_csv(it_results_dir / f'{id}-drawdowns.csv', index=False)
 
 
 @dataclass

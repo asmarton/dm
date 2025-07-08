@@ -61,6 +61,12 @@
         </section>
 
         <section class="my-4">
+            <h2 class="text-2xl font-bold mb-4">Drawdowns</h2>
+
+            {{ model.drawdowns.to_html(table_id='drawdowns') | safe }}
+        </section>
+
+        <section class="my-4">
             <h2 class="text-2xl font-bold mb-4">Trades ({{ model.trades_count }})</h2>
 
             {{ model.trades.to_html(index_names=False, table_id='trades') | safe }}
