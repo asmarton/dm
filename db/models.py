@@ -42,5 +42,6 @@ class IndustryTrendsJob(Base):
     trade_cost_per_share = Column(Double, nullable=False)
     trade_cost_min = Column(Double, nullable=False)
     rebalance_threshold = Column(Double, nullable=False)
+    benchmark = Column(String, nullable=False)
     user = Column(String, nullable=False, server_default='*')
     created_at = Column(DateTime, nullable=False, server_default=func.now())

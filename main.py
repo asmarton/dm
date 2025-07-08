@@ -167,6 +167,7 @@ async def industry_trends_create(request: Request, session: SessionDep, payload:
         trade_cost_per_share=payload.trade_cost_per_share,
         trade_cost_min=payload.trade_cost_min,
         rebalance_threshold=payload.rebalance_threshold,
+        benchmark=payload.benchmark,
         user=payload.user,
     )
     job = it_job_service.create_job(session, job)

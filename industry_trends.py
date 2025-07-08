@@ -219,8 +219,20 @@ def trend_following_strategy(job: schemas.IndustryTrendsJobBase) -> TrendFollowi
     holdings = (shares * prices).fillna(0).sum(axis=1)
     equity = holdings + cash - borrowed
 
-    balance = pd.concat([equity, holdings, cash, borrowed], axis=1).rename(columns={0: 'Equity', 1: 'Holdings', 2: 'Cash', 3: 'Borrowed'})
+    benchmark_prices = utils.get_closing_prices(job.benchmark)[job.start_date:job.end_date]
+    benchmark_balance = (benchmark_prices.pct_change() + 1).fillna(1).cumprod() * job.initial_balance
+    balance = pd.concat([equity, holdings, cash, borrowed, benchmark_balance], axis=1).rename(columns={0: 'Equity', 1: 'Holdings', 2: 'Cash', 3: 'Borrowed'})
     balance.index.name = 'Date'
+
+    benchmark_returns = pd.DataFrame(benchmark_prices.groupby(pd.Grouper(freq='ME')).nth(-1).pct_change() * 100).rename(
+        columns={job.benchmark: 'Return'})
+    print(benchmark_returns.columns)
+    benchmark_returns.index.name = 'Date'
+    benchmark_returns['Year'] = benchmark_returns.index.year
+    benchmark_returns['Month'] = benchmark_returns.index.month
+    print(benchmark_returns.columns)
+    benchmark_returns = benchmark_returns.pivot(index='Year', columns='Month', values='Return')
+    benchmark_returns = ((1 + benchmark_returns / 100).prod(axis=1) - 1) * 100
 
     monthly_returns = pd.DataFrame(equity.groupby(pd.Grouper(freq='ME')).nth(-1).pct_change() * 100).rename(
         columns={0: 'Return'})
@@ -231,6 +243,7 @@ def trend_following_strategy(job: schemas.IndustryTrendsJobBase) -> TrendFollowi
     monthly_returns.columns = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
                                'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
     monthly_returns['Yearly'] = ((1 + monthly_returns / 100).prod(axis=1) - 1) * 100
+    monthly_returns[f'Benchmark ({job.benchmark})'] = benchmark_returns
     monthly_returns.fillna('', inplace=True)
 
     trades = shares.diff().fillna(0)

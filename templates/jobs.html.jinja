@@ -19,6 +19,7 @@
                 <th>End</th>
                 <th>Initial Amt</th>
                 <th>Tickers</th>
+                <th>Safe Asset</th>
                 <th><abbr title="Single Absolute Momentum">SAM</abbr></th>
                 <th>Rebalance Period</th>
                 <th>Lookback Period</th>
@@ -38,6 +39,7 @@
                     <td>{{ job.end_year }}-{{ "%02d"|format(job.end_month) }}</td>
                     <td>${{ job.initial_investment }}</td>
                     <td>{{ job.tickers }}</td>
+                    <td>{{ job.safe_asset }}</td>
                     <td>{{ job.single_absolute_momentum if job.single_absolute_momentum is not none }}</td>
                     <td>{{ job.rebalance_period }}</td>
                     <td>{{ job.lookback_period }}</td>

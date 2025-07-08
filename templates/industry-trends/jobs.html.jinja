@@ -19,6 +19,14 @@
                 <th>End</th>
                 <th>Initial Amt</th>
                 <th>Tickers</th>
+                <th>Up</th>
+                <th>Down</th>
+                <th>Target Vol</th>
+                <th>Max leverage</th>
+                <th>Cost per share</th>
+                <th>Min trade cost</th>
+                <th>Rebalance threshold</th>
+                <th>Benchmark</th>
                 <th>Created At</th>
             </tr>
         </thead>
@@ -32,6 +40,14 @@
                     <td>{{ job.end_date.strftime('%Y-%m-%d') }}</td>
                     <td>${{ job.initial_balance }}</td>
                     <td>{{ job.tickers }}</td>
+                    <td>{{ job.up_period }}</td>
+                    <td>{{ job.down_period }}</td>
+                    <td>{{ job.target_volatility }}</td>
+                    <td>{{ job.max_leverage }}</td>
+                    <td>{{ job.trade_cost_per_share }}</td>
+                    <td>{{ job.trade_cost_min }}</td>
+                    <td>{{ job.rebalance_threshold }}</td>
+                    <td>{{ job.benchmark }}</td>
                     <td>{{ job.created_at }}</td>
                 </tr>
             {% endfor %}

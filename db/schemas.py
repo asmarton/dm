@@ -42,6 +42,7 @@ class IndustryTrendsJobBase(BaseModel):
     trade_cost_per_share: float = 0.0035
     trade_cost_min: float = 0.35
     rebalance_threshold: float = 0.1
+    benchmark: str
     user: str = Field(min_length=1)
 
 
