@@ -149,7 +149,12 @@ def dual_momentum(job: JobBase) -> DualMomentumResults:
     monthly_returns = monthly_returns.ffill().dropna().groupby(pd.Grouper(freq='ME')).nth(-1)
     monthly_returns = monthly_returns.loc[start:end]
 
-    lookback_returns = (1 + monthly_returns).rolling(job.lookback_period).apply(lambda x: x.prod()) - 1
+    if job.exclude_prev_month:
+        if job.lookback_period <= 1:
+            raise RuntimeError('Lookback period must be at least 2 months when excluding previous month')
+        lookback_returns = (1 + monthly_returns).shift(1).rolling(job.lookback_period - 1).apply(lambda x: x.prod()) - 1
+    else:
+        lookback_returns = (1 + monthly_returns).rolling(job.lookback_period).apply(lambda x: x.prod()) - 1
 
     market_lookback_returns = lookback_returns[tickers]
     sam_lookback_returns = (
@@ -308,7 +313,12 @@ def dual_momentum_multi(job: JobBase) -> DualMomentumMultiResults:
     monthly_returns = monthly_returns.ffill().dropna().groupby(pd.Grouper(freq='ME')).nth(-1)
     monthly_returns = monthly_returns.loc[start:end]
 
-    lookback_returns = (1 + monthly_returns).rolling(job.lookback_period).apply(lambda x: x.prod()) - 1
+    if job.exclude_prev_month:
+        if job.lookback_period <= 1:
+            raise RuntimeError('Lookback period must be at least 2 months when excluding previous month')
+        lookback_returns = (1 + monthly_returns).shift(1).rolling(job.lookback_period - 1).apply(lambda x: x.prod()) - 1
+    else:
+        lookback_returns = (1 + monthly_returns).rolling(job.lookback_period).apply(lambda x: x.prod()) - 1
 
     market_lookback_returns = lookback_returns[tickers]
     sam_lookback_returns = (

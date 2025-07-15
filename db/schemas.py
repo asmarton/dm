@@ -16,6 +16,7 @@ class JobBase(BaseModel):
     switching_cost: float
     single_absolute_momentum: str | None = None
     max_assets: int
+    exclude_prev_month: bool
     user: str = Field(min_length=1)
 
 

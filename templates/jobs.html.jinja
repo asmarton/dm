@@ -24,6 +24,7 @@
                 <th>Max Assets</th>
                 <th>Rebalance Period</th>
                 <th>Lookback Period</th>
+                <th>Exclude Prev. Month</th>
                 <th>Switching Cost</th>
                 <th>Returns</th>
                 <th>Trades</th>
@@ -45,6 +46,7 @@
                     <td>{{ job.max_assets }}</td>
                     <td>{{ job.rebalance_period }}</td>
                     <td>{{ job.lookback_period }}</td>
+                    <td>{{ job.exclude_prev_month }}</td>
                     <td>{{ job.switching_cost }}%</td>
                     <td><a href="/static/results/{{ job.id }}-portfolio.csv" download class="button !text-black !no-underline">Download ⬇</a></td>
                     <td><a href="/static/results/{{ job.id }}-trades.csv" download class="button !text-black !no-underline">Download ⬇</a></td>

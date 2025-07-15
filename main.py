@@ -58,6 +58,7 @@ class JobFormData(BaseModel):
     lookback_period: int
     switching_cost: float
     max_assets: int
+    exclude_prev_month: bool
 
 
 @app.post('/')
@@ -82,6 +83,7 @@ async def model(data: Annotated[JobFormData, Form()], session: SessionDep):
         switching_cost=data.switching_cost,
         single_absolute_momentum=data.single_absolute_momentum if data.single_absolute_momentum else None,
         max_assets=data.max_assets,
+        exclude_prev_month=data.exclude_prev_month,
         user=data.user,
     )
 
