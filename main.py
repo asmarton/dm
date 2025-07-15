@@ -58,7 +58,7 @@ class JobFormData(BaseModel):
     lookback_period: int
     switching_cost: float
     max_assets: int
-    exclude_prev_month: bool
+    exclude_prev_month: bool = False
 
 
 @app.post('/')
