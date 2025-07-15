@@ -22,6 +22,7 @@ class Job(Base):
     lookback_period = Column(Integer, nullable=False)
     switching_cost = Column(Double, nullable=False)
     single_absolute_momentum = Column(String, nullable=True)
+    max_assets = Column(Integer, nullable=False, default=1, server_default='1')
     user = Column(String, nullable=False, server_default='*')
     created_at = Column(DateTime, nullable=False, server_default=func.now())
 

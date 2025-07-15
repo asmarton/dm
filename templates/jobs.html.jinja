@@ -21,6 +21,7 @@
                 <th>Tickers</th>
                 <th>Safe Asset</th>
                 <th><abbr title="Single Absolute Momentum">SAM</abbr></th>
+                <th>Max Assets</th>
                 <th>Rebalance Period</th>
                 <th>Lookback Period</th>
                 <th>Switching Cost</th>
@@ -41,6 +42,7 @@
                     <td>{{ job.tickers }}</td>
                     <td>{{ job.safe_asset }}</td>
                     <td>{{ job.single_absolute_momentum if job.single_absolute_momentum is not none }}</td>
+                    <td>{{ job.max_assets }}</td>
                     <td>{{ job.rebalance_period }}</td>
                     <td>{{ job.lookback_period }}</td>
                     <td>{{ job.switching_cost }}%</td>

@@ -15,6 +15,7 @@ class JobBase(BaseModel):
     lookback_period: int
     switching_cost: float
     single_absolute_momentum: str | None = None
+    max_assets: int
     user: str = Field(min_length=1)
 
 

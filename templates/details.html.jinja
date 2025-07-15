@@ -30,6 +30,8 @@
                 <dd>{{ job.lookback_period }}</dd>
                 <dt>Switching Cost</dt>
                 <dd>{{ job.switching_cost }}%</dd>
+                <dt>Max Assets</dt>
+                <dd>{{ job.max_assets }}</dd>
                 <dt>Created At</dt>
                 <dd>{{ job.created_at }}</dd>
             </dl>
@@ -53,7 +55,7 @@
         <div class="flex flex-wrap gap-6">
             <section>
                 <h2 class="text-2xl font-bold mb-4">Trades</h2>
-                {{ trades.to_html() | safe }}
+                {{ trades.to_html(table_id='trades') | safe }}
             </section>
             <section>
                 <h2 class="text-2xl font-bold mb-4">Asset Info</h2>
@@ -117,5 +119,9 @@
             colorPositivity(cells[idx]);
           }
         }
+
+        document.querySelectorAll('#trades tbody td:not(:first-of-type)').forEach((cell) => {
+          colorPositivity(cell);
+        });
     </script>
 {% endblock %}

@@ -57,6 +57,7 @@ class JobFormData(BaseModel):
     rebalance_period: int
     lookback_period: int
     switching_cost: float
+    max_assets: int
 
 
 @app.post('/')
@@ -80,10 +81,14 @@ async def model(data: Annotated[JobFormData, Form()], session: SessionDep):
         lookback_period=data.lookback_period,
         switching_cost=data.switching_cost,
         single_absolute_momentum=data.single_absolute_momentum if data.single_absolute_momentum else None,
+        max_assets=data.max_assets,
         user=data.user,
     )
 
-    results = dm.dual_momentum(job)
+    if data.max_assets > 1:
+        results = dm.dual_momentum_multi(job)
+    else:
+        results = dm.dual_momentum(job)
 
     job.start_year = results.portfolio.index[0].year
     job.start_month = results.portfolio.index[0].month

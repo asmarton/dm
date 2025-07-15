@@ -15,6 +15,7 @@ dependencies = [
     "python-multipart>=0.0.20",
     "requests-cache>=1.2.1",
     "sqlalchemy>=2.0.41",
+    "statsmodels>=0.14.5",
     "uvicorn>=0.35.0",
     "yfinance>=0.2.65",
 ]
