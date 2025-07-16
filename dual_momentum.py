@@ -13,7 +13,7 @@ import db.models
 import db.schemas as schemas
 import utils
 from db.schemas import JobBase
-from utils import ROOT_DIR
+from utils import ROOT_DIR, tickers_to_list
 
 tbills_symbol = 'DGS3MO'
 
@@ -429,6 +429,20 @@ class JobViewModel:
     ticker_info: list[TickerInfo]
 
 
+def compute_drawdowns(portfolio: pd.DataFrame) -> pd.DataFrame:
+    drawdowns = pd.DataFrame()
+    for col in portfolio.columns:
+        col_search = re.search(r'(.*) Balance', col)
+        if col_search:
+            asset = col_search.group(1)
+            balance_col = f'{asset} Balance'
+            running_max = portfolio[balance_col].cummax()
+            drawdown_pct = (portfolio[balance_col] - running_max) / running_max * 100
+            mdd = drawdown_pct.min()
+            drawdowns[f'{asset} Maximum Drawdown'] = [f'{round(mdd, 2)}%']
+    return drawdowns
+
+
 def load_results(job: schemas.Job) -> JobViewModel:
     portfolio_path, trades_path, ticker_info_path = job_results_paths(job.id)
     portfolio = pd.read_csv(portfolio_path)
@@ -443,16 +457,7 @@ def load_results(job: schemas.Job) -> JobViewModel:
     portfolio.index = portfolio.index + 1
     trades.index = trades.index + 1
 
-    drawdowns = pd.DataFrame()
-    for col in portfolio.columns:
-        col_search = re.search(r'(.*) Balance', col)
-        if col_search:
-            asset = col_search.group(1)
-            balance_col = f'{asset} Balance'
-            running_max = portfolio[balance_col].cummax()
-            drawdown_pct = (portfolio[balance_col] - running_max) / running_max * 100
-            mdd = drawdown_pct.min()
-            drawdowns[f'{asset} Maximum Drawdown'] = [f'{round(mdd, 2)}%']
+    drawdowns = compute_drawdowns(portfolio)
 
     return JobViewModel(
         job=job,
@@ -461,3 +466,20 @@ def load_results(job: schemas.Job) -> JobViewModel:
         drawdowns=drawdowns,
         ticker_info=ticker_info,
     )
+
+
+def compare_performance(job: schemas.JobBase) -> pd.DataFrame:
+    perfs = {}
+    tickers = tickers_to_list(job.tickers)
+    for max_assets in range(1, len(tickers) + 1):
+        job.max_assets = max_assets
+        if max_assets == 1:
+            results = dual_momentum(job)
+        else:
+            results = dual_momentum_multi(job)
+        perfs[max_assets] = {'Balance': results.portfolio.iloc[-1]['Dual Momentum Balance'],
+                             'Drawdown': compute_drawdowns(results.portfolio).loc[
+                                 0, 'Dual Momentum Maximum Drawdown']}
+    df = pd.DataFrame.from_dict(perfs, orient='index')
+    df.index.name = 'Max Assets'
+    return df

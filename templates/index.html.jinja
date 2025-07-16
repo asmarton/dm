@@ -1,49 +1,70 @@
 {% extends "layout.html.jinja" %}
 
 {% block main %}
-    <h1 class="text-4xl font-bold mb-4">Dual Momentum</h1>
+    <div class="flex gap-6">
+        <section>
+            <h1 class="text-4xl font-bold mb-4">Dual Momentum</h1>
 
-    <form method="post" action="/" class="max-w-[30rem] grid grid-cols-[auto_1fr] gap-y-2 gap-x-4 items-center">
-        <label for="user">User*</label>
-        <input id="user" name="user" type="text" required value="{{ user if user else '' }}">
+            <form id="form" method="post" action="/" class="max-w-[30rem] grid grid-cols-[auto_1fr] gap-y-2 gap-x-4 items-center">
+                <label for="user">User*</label>
+                <input id="user" name="user" type="text" required value="{{ user if user else '' }}">
 
-        <label for="start_date">Start Date*</label>
-        <input id="start_date" name="start_date" type="month" value="2000-01" required>
+                <label for="start_date">Start Date*</label>
+                <input id="start_date" name="start_date" type="month" value="2000-01" required>
 
-        <label for="end_date">End Date*</label>
-        <input id="end_date" name="end_date" type="month" value="2025-06" required>
+                <label for="end_date">End Date*</label>
+                <input id="end_date" name="end_date" type="month" value="2025-06" required>
 
-        <label for="initial_investment">Initial Amount*</label>
-        <input id="initial_investment" name="initial_investment" type="number" step=".01" value="10000" required>
+                <label for="initial_investment">Initial Amount*</label>
+                <input id="initial_investment" name="initial_investment" type="number" step=".01" value="10000" required>
 
-        <label for="tickers">Tickers (comma separated)*</label>
-        <input id="tickers" name="tickers" type="text" required>
+                <label for="tickers">Tickers (comma separated)*</label>
+                <input id="tickers" name="tickers" type="text" required>
 
-        <label for="safe_asset">Out of Market Asset*</label>
-        <input id="safe_asset" name="safe_asset" type="text">
+                <label for="safe_asset">Out of Market Asset*</label>
+                <input id="safe_asset" name="safe_asset" type="text">
 
-        <label for="single_absolute_momentum" title="Use single asset for absolute momentum filter">Single Absolute Momentum</label>
-        <input id="single_absolute_momentum" name="single_absolute_momentum" type="text">
+                <label for="single_absolute_momentum" title="Use single asset for absolute momentum filter">Single Absolute Momentum</label>
+                <input id="single_absolute_momentum" name="single_absolute_momentum" type="text">
 
-        <label for="rebalance_period" title="How often to consider trades">Rebalance Period (months)*</label>
-        <input id="rebalance_period" name="rebalance_period" type="number" min="1" max="12" value="1" required>
+                <label for="rebalance_period" title="How often to consider trades">Rebalance Period (months)*</label>
+                <input id="rebalance_period" name="rebalance_period" type="number" min="1" max="12" value="1" required>
 
-        <label for="lookback_period" title="How many months to consider for momentum calculations">Lookback Period (months)*</label>
-        <input id="lookback_period" name="lookback_period" type="number" min="1" max="24" value="12" required>
+                <label for="lookback_period" title="How many months to consider for momentum calculations">Lookback Period (months)*</label>
+                <input id="lookback_period" name="lookback_period" type="number" min="1" max="24" value="12" required>
 
-        <label for="exclude_prev_month">Exclude previous month</label>
-        <input id="exclude_prev_month" name="exclude_prev_month" type="checkbox">
-
-
-        <label for="switching_cost" title="How much value the portfolio loses whenever a trade happens">Switching Cost (%)*</label>
-        <input id="switching_cost" name="switching_cost" type="number" min="0" value="0" step="0.0001" required>
-
-        <label for="max_assets">Max assets*</label>
-        <input id="max_assets" name="max_assets" type="number" min="1" max="12" value="1" required>
+                <label for="exclude_prev_month">Exclude previous month</label>
+                <input id="exclude_prev_month" name="exclude_prev_month" type="checkbox">
 
 
-        <button>Compute</button>
-    </form>
+                <label for="switching_cost" title="How much value the portfolio loses whenever a trade happens">Switching Cost (%)*</label>
+                <input id="switching_cost" name="switching_cost" type="number" min="0" value="0" step="0.0001" required>
+
+                <label for="max_assets">Max assets*</label>
+                <input id="max_assets" name="max_assets" type="number" min="1" max="12" value="1" required>
+
+                <button class="!bg-indigo-400 hover:!bg-indigo-300 text-white">Compute</button>
+
+                <button type="button" onclick="comparePerformance()">Compare performance</button>
+            </form>
+        </section>
+        <section id="comparison"></section>
+    </div>
+
 
     <section id="jobs" hx-trigger="load" hx-get="/jobs?page=0" hx-swap="outerHTML" hx-target="#jobs"></section>
+
+    <script>
+        async function comparePerformance() {
+          const comparisonSection = document.getElementById('comparison');
+          comparisonSection.innerHTML = 'Loading...';
+          const form = document.getElementById('form');
+          const result = await fetch('/dm/compare-perf', {
+            method: 'post',
+            body: new FormData(form),
+          });
+          const html = await result.text();
+          comparisonSection.innerHTML = html;
+        }
+    </script>
 {% endblock %}

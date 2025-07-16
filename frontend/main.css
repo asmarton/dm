@@ -14,7 +14,7 @@ table {
 }
 
 button, .button {
-    @apply border py-1 px-2 shadow-[2px_2px_0_0] cursor-pointer bg-gray-100 hover:not-disabled:bg-gray-200 disabled:bg-gray-300 disabled:shadow-gray-300 disabled:text-gray-600 disabled:cursor-not-allowed;
+    @apply border border-black py-1 px-2 shadow-[2px_2px_0_0] shadow-black cursor-pointer bg-gray-100 hover:not-disabled:bg-gray-200 disabled:bg-gray-300 disabled:shadow-gray-300 disabled:text-gray-600 disabled:cursor-not-allowed;
 }
 
 .button {

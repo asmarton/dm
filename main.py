@@ -61,16 +61,10 @@ class JobFormData(BaseModel):
     exclude_prev_month: bool = False
 
 
-@app.post('/')
-async def model(data: Annotated[JobFormData, Form()], session: SessionDep):
+def job_form_data_to_schema(data: JobFormData) -> schemas.JobCreate:
     start_date = datetime.strptime(data.start_date, '%Y-%m')
     end_date = datetime.strptime(data.end_date, '%Y-%m')
-
-    tickers_regex = r'^(\w+\s*,\s*)+(\w+)$'
-    if not re.match(tickers_regex, data.tickers):
-        raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail='Invalid tickers')
-
-    job = schemas.JobCreate(
+    return schemas.JobCreate(
         start_year=start_date.year,
         start_month=start_date.month,
         end_year=end_date.year,
@@ -86,6 +80,15 @@ async def model(data: Annotated[JobFormData, Form()], session: SessionDep):
         exclude_prev_month=data.exclude_prev_month,
         user=data.user,
     )
+
+
+@app.post('/')
+async def model(data: Annotated[JobFormData, Form()], session: SessionDep):
+    tickers_regex = r'^(\w+\s*,\s*)+(\w+)$'
+    if not re.match(tickers_regex, data.tickers):
+        raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail='Invalid tickers')
+
+    job = job_form_data_to_schema(data)
 
     if data.max_assets > 1:
         results = dm.dual_momentum_multi(job)
@@ -144,6 +147,19 @@ async def details(request: Request, session: SessionDep, job_id: int = 0):
             'drawdowns': view_model.drawdowns,
             'ticker_info': view_model.ticker_info,
         },
+    )
+
+
+@app.post('/dm/compare-perf', response_class=HTMLResponse)
+async def dm_compare_perf(request: Request, data: Annotated[JobFormData, Form()]):
+    job = job_form_data_to_schema(data)
+    perf = dm.compare_performance(job)
+    return templates.TemplateResponse(
+        request=request,
+        name='compare-perf.html.jinja',
+        context={
+            'perf': perf
+        }
     )
 
 
