@@ -1,3 +1,13 @@
 <h2 class="text-2xl font-bold mb-4">Comparison based on max assets</h2>
 
+<p class="mb-2">
+    <time class="font-bold">{{ start_date.strftime('%Y-%m-%d') }}</time> &ndash; <time class="font-bold">{{ end_date.strftime('%Y-%m-%d') }}</time>
+</p>
+
+<p class="mb-2">
+    {{ benchmark_ticker }} Balance: {{ benchmark }}
+</p>
+
 {{ perf.to_html() | safe }}
+
+

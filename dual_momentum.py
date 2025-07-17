@@ -468,18 +468,22 @@ def load_results(job: schemas.Job) -> JobViewModel:
     )
 
 
-def compare_performance(job: schemas.JobBase) -> pd.DataFrame:
+def compare_performance(job: schemas.JobBase) -> tuple[pd.DataFrame, datetime, datetime]:
     perfs = {}
     tickers = tickers_to_list(job.tickers)
     for max_assets in range(1, len(tickers) + 1):
         job.max_assets = max_assets
         if max_assets == 1:
             results = dual_momentum(job)
+            trades_count = len(results.trades) * 2 - 1
         else:
             results = dual_momentum_multi(job)
+            trades_count = results.trades.astype(bool).sum(axis=1).sum()
+        start_date = results.portfolio.index[0]
+        end_date = results.portfolio.index[-1]
         perfs[max_assets] = {'Balance': results.portfolio.iloc[-1]['Dual Momentum Balance'],
                              'Drawdown': compute_drawdowns(results.portfolio).loc[
-                                 0, 'Dual Momentum Maximum Drawdown']}
+                                 0, 'Dual Momentum Maximum Drawdown'], 'Trades': trades_count}
     df = pd.DataFrame.from_dict(perfs, orient='index')
     df.index.name = 'Max Assets'
-    return df
+    return df, start_date, end_date

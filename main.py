@@ -59,6 +59,7 @@ class JobFormData(BaseModel):
     switching_cost: float
     max_assets: int
     exclude_prev_month: bool = False
+    benchmark: str | None = None
 
 
 def job_form_data_to_schema(data: JobFormData) -> schemas.JobCreate:
@@ -153,12 +154,21 @@ async def details(request: Request, session: SessionDep, job_id: int = 0):
 @app.post('/dm/compare-perf', response_class=HTMLResponse)
 async def dm_compare_perf(request: Request, data: Annotated[JobFormData, Form()]):
     job = job_form_data_to_schema(data)
-    perf = dm.compare_performance(job)
+    perf, start_date, end_date = dm.compare_performance(job)
+    benchmark_ticker = data.benchmark or 'SPY'
+    benchmark, _ = dm.compute_monthly_returns_with_fallback(benchmark_ticker)
+    benchmark = benchmark.loc[start_date:end_date]
+    benchmark = data.initial_investment * (1 + benchmark).cumprod().iloc[-1]
+    benchmark = benchmark[benchmark_ticker]
     return templates.TemplateResponse(
         request=request,
         name='compare-perf.html.jinja',
         context={
-            'perf': perf
+            'perf': perf,
+            'benchmark': round(benchmark, 2),
+            'benchmark_ticker': benchmark_ticker,
+            'start_date': start_date,
+            'end_date': end_date,
         }
     )
 
