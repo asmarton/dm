@@ -1,19 +1,45 @@
 import pathlib
-from datetime import datetime, timedelta
-
 import pandas as pd
 import numpy as np
-import yfinance as yf
-import math
-
 from dataclasses import dataclass
-from pydantic import BaseModel
-
 import utils
 from db import schemas
 from utils import ROOT_DIR
+import kfrench
 
-etfs = ['XLF','XLK','XLE','XLV','XLI','XBI','XLU','XLP','XLY','KRE','XLB','XLC','XRT','XOP','XLRE','XHB','KBE','XME','KIE','XSD','XAR','XES','KCE','XNTK','XHE','XSW','XPH','XTN','XHS','XITK','XTL']
+etfs = [
+    'XLF',
+    'XLK',
+    'XLE',
+    'XLV',
+    'XLI',
+    'XBI',
+    'XLU',
+    'XLP',
+    'XLY',
+    'KRE',
+    'XLB',
+    'XLC',
+    'XRT',
+    'XOP',
+    'XLRE',
+    'XHB',
+    'KBE',
+    'XME',
+    'KIE',
+    'XSD',
+    'XAR',
+    'XES',
+    'KCE',
+    'XNTK',
+    'XHE',
+    'XSW',
+    'XPH',
+    'XTN',
+    'XHS',
+    'XITK',
+    'XTL',
+]
 
 
 def get_tbills() -> pd.DataFrame:
@@ -31,218 +57,285 @@ atr_approx_factor = 1.4
 
 @dataclass
 class TrendFollowingResults:
-    weights: pd.DataFrame
-    positions: pd.DataFrame
-    trailing_stop: pd.DataFrame
-    cash: pd.Series
-    borrowed: pd.Series
-    shares: pd.DataFrame
-    holdings: pd.DataFrame
-    equity: pd.Series
-    balance: pd.DataFrame
-    tx_costs: pd.Series
-    monthly_returns: pd.DataFrame
+    indicators_df: pd.DataFrame
+    portfolio: pd.DataFrame
+    returns: pd.DataFrame
     trades: pd.DataFrame
     drawdowns: pd.DataFrame
-    signals: pd.DataFrame
-    channels: pd.DataFrame
-    keltner_channels: pd.DataFrame
-    donchian_channels: pd.DataFrame
 
 
-def trend_following_strategy(job: schemas.IndustryTrendsJobBase) -> TrendFollowingResults:
+def timing_etfs(job: schemas.IndustryTrendsJobBase) -> TrendFollowingResults:
     max_leverage = job.max_leverage / 100
     target_volatility = job.target_volatility / 100
     rebalance_threshold = job.rebalance_threshold / 100
 
-    preparation_days = math.ceil(max(job.up_period, job.down_period, job.vol_window) * 8/5)
-    start_date = job.start_date - timedelta(days=preparation_days)
-
     price_dfs = []
-    for ticker in job.tickers:
+    for ticker in etfs:
         price_dfs.append(utils.get_closing_prices(ticker))
+    benchmark_prices = utils.get_closing_prices(job.benchmark)[job.start_date:job.end_date]
+    price_dfs.append(benchmark_prices)
     prices = pd.concat(price_dfs, axis='columns')
-    prices = prices[start_date:job.end_date]
-
-    cash = pd.Series(index=prices.index, data=0.0)
-    borrowed = pd.Series(index=prices.index, data=0.0).to_dict()
-    tx_costs = pd.Series(index=prices.index, data=0.0).to_dict()
-
-    tbills_daily_rate = get_tbills()
-
+    prices = prices[job.start_date : job.end_date]
     returns = prices.pct_change()
-    volatility = returns.rolling(job.vol_window).std()
-    weights = pd.DataFrame(index=prices.index, columns=prices.columns, data=0.0).to_dict(orient='index')
-    positions = pd.DataFrame(index=prices.index, columns=prices.columns, data=False).to_dict(orient='index')
-    shares = pd.DataFrame(index=prices.index, columns=prices.columns, data=0.0).to_dict(orient='index')
-    signals = pd.DataFrame(index=prices.index, columns=prices.columns, data=None).to_dict(orient='index')
 
-    channels = dict()
-    keltner_channels = dict()
-    donchian_channels = dict()
-    for j in prices.columns:
-        for pos in ['up', 'price', 'down']:
-            channels[(j, pos)] = dict()
-            keltner_channels[(j, pos)] = dict()
-            donchian_channels[(j, pos)] = dict()
+    caldt = prices.index
+    returns.rename(columns={job.benchmark: 'mkt_ret'}, inplace=True)
+    returns['tbill_ret'] = kfrench.tbill_french_reconciled(caldt)
 
-    ema_up = prices.ewm(span=job.up_period, adjust=False).mean()
-    ema_down = prices.ewm(span=job.down_period, adjust=False).mean()
-    atr_approx_up = atr_approx_factor * returns.abs().rolling(job.up_period).mean()
-    atr_approx_down = atr_approx_factor * returns.abs().rolling(job.down_period).mean()
+    prices.drop(job.benchmark, axis=1, inplace=True)
 
-    keltner_up = ema_up + keltner_mult * atr_approx_up
-    keltner_down = ema_down + keltner_mult * atr_approx_down
-    donchian_up = prices.rolling(job.up_period).max()
-    donchian_down = prices.rolling(job.down_period).min()
+    # Determine the number of portfolios dynamically
+    num_portfolios = returns.shape[1] - 2  # Subtracting 2 to account for 'mkt_ret' and 'tbill_ret'
 
-    upper_band = np.minimum(donchian_up, keltner_up)
-    lower_band = np.maximum(donchian_down, keltner_down)
+    # Indicator parameters
+    UP_DAY = job.up_period
+    DOWN_DAY = job.down_period
+    ADR_VOL_ADJ = 1.4  # ATR is usually 1.4x Vol(close2close)
+    KELT_MULT = 2 * ADR_VOL_ADJ
 
-    trailing_stop = [lower_band.iloc[0].fillna(0)]
-    for t in range(1, len(lower_band.index)):
-        trailing_stop_t = np.maximum(trailing_stop[t - 1], lower_band.iloc[t].fillna(0))
-        trailing_stop.append(trailing_stop_t)
-    trailing_stop = pd.DataFrame(index=lower_band.index, columns=lower_band.columns, data=trailing_stop)
+    # Define rolling functions
+    def rolling_vol(df, window):
+        return df.rolling(window=window).std(ddof=0)
 
-    for j in prices.columns:
-        channels[(j, 'down')] = lower_band[j]
-        channels[(j, 'price')] = prices[j]
-        channels[(j, 'up')] = upper_band[j]
-        channels[(j, 'stop')] = trailing_stop[j]
-        keltner_channels[(j, 'down')] = keltner_down[j]
-        keltner_channels[(j, 'price')] = prices[j]
-        keltner_channels[(j, 'up')] = keltner_up[j]
-        donchian_channels[(j, 'down')] = donchian_down[j]
-        donchian_channels[(j, 'price')] = prices[j]
-        donchian_channels[(j, 'up')] = donchian_up[j]
+    def rolling_ema(df, window):
+        return df.ewm(span=window, adjust=False).mean()
 
-    channels = pd.DataFrame.from_dict(channels)
-    keltner_channels = pd.DataFrame.from_dict(keltner_channels)
-    donchian_channels = pd.DataFrame.from_dict(donchian_channels)
+    def rolling_max(df, window):
+        return df.rolling(window=window).max()
 
-    cash.iloc[:preparation_days] = job.initial_balance
+    def rolling_min(df, window):
+        return df.rolling(window=window).min()
 
+    def rolling_mean(df, window):
+        return df.rolling(window=window, min_periods=window - 1).mean()
 
-    # EOD: prices, channels, bands, trailing stops. These are computed for the end of the day, because they are derived from close prices.
-    # SOD: positions, weights. These are computed for the start of the day. We use t - 1 EOD data to get t SOD positions and weights.
-    # This means that at the end of day t - 1 we figure out what trades we need to execute the following morning. After the trades are executed
-    # positions and weights for day t become reality. At the end of the t day, when evaluating the portfolio, we use the t positions and weights.
+    # Calculate rolling volatility of daily returns
+    vol = rolling_vol(returns.iloc[:, :num_portfolios], UP_DAY)
 
-    for t in range(preparation_days, len(prices)):
-        date = prices.index[t]
-        # print(f'* Day {t} - {date}')
-        prev_date = prices.index[t - 1]
+    # Technical indicators
+    ema_down = rolling_ema(prices, DOWN_DAY)
+    ema_up = rolling_ema(prices, UP_DAY)
 
-        # Compute desired positions at the start of the day
-        for j in prices.columns:
-            prev_position = positions[prev_date][j]
-            prev_price = prices[j].iloc[t - 1]
+    # Donchian channels
+    donc_up = rolling_max(prices, UP_DAY)
+    donc_down = rolling_min(prices, DOWN_DAY)
 
-            # Entry condition
-            if not prev_position and prev_price >= upper_band[j].iloc[t - 1] and prev_price > trailing_stop[j].iloc[t - 1]:
-                positions[date][j] = True
-                signal = '+'
-                if prev_price >= donchian_channels[j, 'up'].iloc[t - 1]:
-                    signal += 'D'
-                if prev_price >= keltner_channels[j, 'up'].iloc[t - 1]:
-                    signal += 'K'
-                signals[date][j] = signal
-            # Exit condition
-            elif prev_position:
-                if prev_price < trailing_stop[j].iloc[t - 1]:
-                    positions[date][j] = False
-                    signal = '-'
-                    if prev_price < donchian_channels[j, 'down'].iloc[t - 1]:
-                        signal += 'D'
-                    if prev_price < keltner_channels[j, 'down'].iloc[t - 1]:
-                        signal += 'K'
-                    signals[date][j] = signal
-                else:
-                    positions[date][j] = True
-            else:
-                positions[date][j] = False
+    # Keltner bands
+    price_change = prices.diff(periods=1).abs()
+    kelt_up = ema_up + KELT_MULT * rolling_mean(price_change, UP_DAY)
+    kelt_down = ema_down - KELT_MULT * rolling_mean(price_change, DOWN_DAY)
 
-        # Compute desired weights at the start of the day
-        active = positions[date]
-        n_active = sum(active.values())
-        weights_today = {}
-        for j in prices.columns:
-            if active[j]:
-                sigma = volatility[j].iloc[t]
-                if pd.notna(sigma) and sigma > 0:
-                    w = (target_volatility / n_active) / sigma
-                    weights_today[j] = w
-                else:
-                    weights_today[j] = 0
-            else:
-                weights_today[j] = 0
-        exposure = sum(weights_today.values())
-        if exposure > max_leverage:
-            scaling_factor = max_leverage / exposure
-            for j in weights_today:
-                weights_today[j] *= scaling_factor
-        weights[date] = weights_today
+    # Model bands
+    long_band = pd.DataFrame(np.minimum(donc_up.values, kelt_up.values), index=donc_up.index, columns=donc_up.columns)
+    short_band = pd.DataFrame(
+        np.maximum(donc_down.values, kelt_down.values), index=donc_down.index, columns=donc_down.columns
+    )
 
-        # Evaluate portfolio and compute real weights before rebalancing
-        holdings = prices.loc[prev_date] * pd.Series(shares[prev_date])
-        borrowed[date] = borrowed[prev_date] + borrowed[prev_date] * tbills_daily_rate.loc[prev_date]
-        cash[date] = cash[prev_date] + cash[prev_date] * tbills_daily_rate.loc[prev_date]
-        equity = holdings.fillna(0).sum() + cash[date] - borrowed[date]
-        before_rebalance_weights = holdings / equity
+    # Model long signal
+    long_band_shifted = long_band.shift(1)
+    short_band_shifted = short_band.shift(1)
+    long_signal = (prices >= long_band_shifted) & (long_band_shifted > short_band_shifted)
 
-        trade_balance = 0
-        for j in prices.columns:
-            if weights_today[j] > before_rebalance_weights[j]:
-                # We buy
-                amount = (weights_today[j] - before_rebalance_weights[j]) * equity
-                bought_shares = amount / prices.loc[prev_date, j]
-                pct_change_shares = bought_shares / shares[prev_date][j] if shares[prev_date][j] > 0 else +math.inf
-                if pct_change_shares >= rebalance_threshold:
-                    shares[date][j] = shares[prev_date][j] + bought_shares
-                    fees = max(job.trade_cost_min, job.trade_cost_per_share * bought_shares)
-                    tx_costs[date] += fees
-                    trade_balance += -fees - amount
-                    # print(f'  Buying {bought_shares} shares of {j} for ${amount} (${prices.loc[prev_date, j]}/share) - change {pct_change_shares * 100} % (W: {before_rebalance_weights[j] * 100}% -> {weights_today[j] * 100}%)')
-                else:
-                    shares[date][j] = shares[prev_date][j]
-            elif weights_today[j] < before_rebalance_weights[j]:
-                # We sell
-                amount = (before_rebalance_weights[j] - weights_today[j]) * equity
-                sold_shares = amount / prices.loc[prev_date, j]
-                pct_change_shares = sold_shares / shares[prev_date][j] if shares[prev_date][j] > 0 else +math.inf
-                if pct_change_shares >= rebalance_threshold:
-                    shares[date][j] = shares[prev_date][j] - sold_shares
-                    fees = max(job.trade_cost_min, job.trade_cost_per_share * sold_shares)
-                    tx_costs[date] += fees
-                    trade_balance += -fees + amount
-                    # print(f'  Selling {sold_shares} shares of {j} for ${amount} (${prices.loc[prev_date, j]}/share) - change {pct_change_shares * 100} % (W: {before_rebalance_weights[j] * 100}% -> {weights_today[j] * 100}%)')
-                else:
-                    shares[date][j] = shares[prev_date][j]
-            else:
-                shares[date][j] = shares[prev_date][j]
-        if trade_balance >= 0:
-            cash[date] += max(0, trade_balance - borrowed[date])
-            borrowed[date] = max(0, borrowed[date] - trade_balance)
-        else:
-            borrowed[date] += max(0, -trade_balance - cash[date])
-            cash[date] = max(0, cash[date] + trade_balance)
-        # equity = (prices.loc[date] * pd.Series(shares[date])).fillna(0).sum() + cash[date] - borrowed[date]
-        # print(f'- Cash: {cash[date]} | Borrowed: {borrowed[date]} | Holdings: {(prices.loc[date] * pd.Series(shares[date])).fillna(0).sum()} | Equity: {equity} | Exposure: {sum(weights_today.values())} | Leverage: {(equity + borrowed[date]) / equity}')
-    weights = pd.DataFrame.from_dict(weights, orient='index')
-    positions = pd.DataFrame.from_dict(positions, orient='index')
-    shares = pd.DataFrame.from_dict(shares, orient='index')
-    cash = pd.Series(cash)
-    borrowed = pd.Series(borrowed)
-    tx_costs = pd.Series(tx_costs)
+    # Create a dictionary of DataFrames for indicators
+    indicator_dfs = {f'ret_{i + 1}': returns.iloc[:, i] for i in range(num_portfolios)}
+    indicator_dfs.update({f'price_{i + 1}': prices.iloc[:, i] for i in range(num_portfolios)})
+    indicator_dfs.update({f'vol_{i + 1}': vol.iloc[:, i] for i in range(num_portfolios)})
+    indicator_dfs.update({f'ema_down_{i + 1}': ema_down.iloc[:, i] for i in range(num_portfolios)})
+    indicator_dfs.update({f'ema_up_{i + 1}': ema_up.iloc[:, i] for i in range(num_portfolios)})
+    indicator_dfs.update({f'donc_up_{i + 1}': donc_up.iloc[:, i] for i in range(num_portfolios)})
+    indicator_dfs.update({f'donc_down_{i + 1}': donc_down.iloc[:, i] for i in range(num_portfolios)})
+    indicator_dfs.update({f'kelt_up_{i + 1}': kelt_up.iloc[:, i] for i in range(num_portfolios)})
+    indicator_dfs.update({f'kelt_down_{i + 1}': kelt_down.iloc[:, i] for i in range(num_portfolios)})
+    indicator_dfs.update({f'long_band_{i + 1}': long_band.iloc[:, i] for i in range(num_portfolios)})
+    indicator_dfs.update({f'short_band_{i + 1}': short_band.iloc[:, i] for i in range(num_portfolios)})
+    indicator_dfs.update({f'long_signal_{i + 1}': long_signal.iloc[:, i] for i in range(num_portfolios)})
 
-    holdings = (shares * prices).fillna(0).sum(axis=1)
-    equity = holdings + cash - borrowed
+    # Concatenate all indicator columns into a single DataFrame
+    indicators_df = pd.concat(indicator_dfs.values(), axis=1)
+    indicators_df.columns = indicator_dfs.keys()
 
-    benchmark_prices = utils.get_closing_prices(job.benchmark)[start_date:job.end_date]
-    benchmark_balance = (benchmark_prices.pct_change() + 1).fillna(1).cumprod() * job.initial_balance
-    balance = pd.concat([equity, holdings, cash, borrowed, benchmark_balance], axis=1).rename(columns={0: 'Equity', 1: 'Holdings', 2: 'Cash', 3: 'Borrowed'})
-    balance.index.name = 'Date'
+    # Add market and tbill returns
+    indicators_df['mkt_ret'] = returns['mkt_ret']
+    indicators_df['tbill_ret'] = returns['tbill_ret']
+
+    AUM_0 = job.initial_balance
+    invest_cash = 'YES'
+    target_vol = target_volatility
+    max_leverage = max_leverage
+    # max_not_trade = 0.20
+
+    N_ind = num_portfolios  # Number of industries in the database
+    T = len(indicators_df[indicators_df.columns[0]])  # Length of the time series
+
+    # Pre-allocate arrays with more specific initial values
+    exposure = np.zeros((T, N_ind))
+    ind_weight = np.zeros((T, N_ind))
+    trail_stop_long = np.full((T, N_ind), np.nan)
+
+    # Vectorized indicator data
+    rets = indicators_df[[f'ret_{j + 1}' for j in range(N_ind)]].values
+    long_signals = indicators_df[[f'long_signal_{j + 1}' for j in range(N_ind)]].values
+    long_bands = indicators_df[[f'long_band_{j + 1}' for j in range(N_ind)]].values
+    short_bands = indicators_df[[f'short_band_{j + 1}' for j in range(N_ind)]].values
+    prices = indicators_df[[f'price_{j + 1}' for j in range(N_ind)]].values
+    vols = indicators_df[[f'vol_{j + 1}' for j in range(N_ind)]].values
+
+    for t in range(1, T):
+        valid_entries = ~np.isnan(rets[t]) & ~np.isnan(long_bands[t])
+
+        prev_exposure = exposure[t - 1]
+        current_exposure = exposure[t]
+        current_trail_stop = trail_stop_long[t]
+        current_long_signals = long_signals[t]
+        current_short_bands = short_bands[t]
+        current_prices = prices[t]
+        current_vols = vols[t]
+
+        new_long_condition = (prev_exposure <= 0) & (current_long_signals == 1)
+        confirm_long_condition = (prev_exposure == 1) & (
+            current_prices > np.maximum(trail_stop_long[t - 1], current_short_bands)
+        )
+        exit_long_condition = (prev_exposure == 1) & (
+            current_prices <= np.maximum(trail_stop_long[t - 1], current_short_bands)
+        )
+
+        # Process new long positions
+        new_longs = valid_entries & new_long_condition
+        current_exposure[new_longs] = 1
+        current_trail_stop[new_longs] = current_short_bands[new_longs]
+
+        # Process confirmed long positions
+        confirm_longs = valid_entries & confirm_long_condition
+        current_exposure[confirm_longs] = 1
+        current_trail_stop[confirm_longs] = np.maximum(
+            trail_stop_long[t - 1, confirm_longs], current_short_bands[confirm_longs]
+        )
+
+        # Process exit long positions
+        exit_longs = valid_entries & exit_long_condition
+        current_exposure[exit_longs] = 0
+        ind_weight[t, exit_longs] = 0
+
+        # Update leverage and weights for active long positions
+        active_longs = current_exposure == 1
+        lev_vol = np.divide(target_vol, current_vols, out=np.zeros_like(current_vols), where=current_vols != 0)
+        ind_weight[t, active_longs] = lev_vol[active_longs]
+
+    # Update the indicators dataframe
+    # Collect new columns in a dictionary
+    new_columns = {}
+    for j in range(N_ind):
+        new_columns[f'exposure_{j + 1}'] = exposure[:, j]
+        new_columns[f'ind_weight_{j + 1}'] = ind_weight[:, j]
+        new_columns[f'trail_stop_long_{j + 1}'] = trail_stop_long[:, j]
+
+    # Convert the dictionary to a DataFrame and concatenate with the original DataFrame
+    new_columns_df = pd.DataFrame(new_columns, index=indicators_df.index)
+    indicators_df = pd.concat([indicators_df, new_columns_df], axis=1)
+
+    # Initialize a DataFrame to store the results at the aggregate portfolio level
+    port = pd.DataFrame(index=indicators_df.index)
+    port['caldt'] = indicators_df.index
+    port['available'] = (
+        indicators_df.filter(like='ret_').notna().sum(axis=1)
+    )  # How many industries were available each day
+
+    ind_weight_df = indicators_df.filter(like='ind_weight_')
+    port_weights = ind_weight_df.div(port['available'], axis=0)
+
+    # Limit the exposure of each industry at "max_not_trade"
+    # port_weights = port_weights.clip(upper=max_not_trade)
+
+    port['sum_exposure'] = port_weights.sum(axis=1)
+    idx_above_max_lev = port[port['sum_exposure'] > max_leverage].index
+
+    port_weights.loc[idx_above_max_lev] = (
+        port_weights.loc[idx_above_max_lev].div(port['sum_exposure'][idx_above_max_lev], axis=0).mul(max_leverage)
+    )
+
+    port['sum_exposure'] = port_weights.sum(axis=1)
+
+    for i in range(N_ind):
+        port[f'weight_{i + 1}'] = port_weights.iloc[:, i]
+
+    ret_long_components = [
+        port[f'weight_{i + 1}'].shift(1).fillna(0) * indicators_df[f'ret_{i + 1}'].fillna(0) for i in range(N_ind)
+    ]
+    port['ret_long'] = sum(ret_long_components)
+
+    port['ret_tbill'] = (1 - port[[f'weight_{i + 1}' for i in range(N_ind)]].shift(1).sum(axis=1)) * indicators_df[
+        'tbill_ret'
+    ]
+
+    if invest_cash == 'YES':
+        port['ret_long'] += port['ret_tbill']
+
+    port['AUM_simple'] = AUM_0 * (1 + port['ret_long']).cumprod()
+    port[job.benchmark] = AUM_0 * (1 + indicators_df['mkt_ret']).cumprod()
+
+    aum = AUM_0
+    trades_count = 0
+    rebalance_threshold = rebalance_threshold
+
+    all_time_aum = []
+    all_time_fees = []
+    all_time_shares = []
+    all_time_trades = []
+    for t in range(0, T):
+        date = port.index[t]
+        aum = aum * (1 + port['ret_long'].iloc[t])
+        shares = port_weights.iloc[t - 1].values * aum / prices[t]
+        shares_ = port_weights.iloc[t].values * aum / prices[t]
+        trades = shares_ - shares
+        trades = np.where(np.isnan(trades), 0, trades)
+
+        saved_trades = trades.copy()
+        trades = abs(trades)
+
+        no_trade = []
+        for j in range(len(trades)):
+            if trades[j] > 0 and shares[j] > 0 and trades[j] / shares[j] < rebalance_threshold:
+                no_trade.append(j)
+                trades[j] = 0
+                saved_trades[j] = 0
+                shares_[j] = shares[j]
+        all_time_trades.append(saved_trades)
+        trade_fees = trades * job.trade_cost_per_share
+        trade_fees[(trade_fees > 0) & (trade_fees < 0.35)] = job.trade_cost_min
+        trades_count += len(trade_fees[trade_fees > 0])
+        trade_fees = sum(trade_fees)
+        all_time_fees.append(trade_fees)
+        aum = aum - trade_fees
+        all_time_aum.append(aum)
+
+        for j in no_trade:
+            port_weights.iloc[t, j] = shares_[j] * prices[t][j] / aum
+        if len(no_trade) > 0:
+            sum_exposure = port_weights.iloc[t].sum()
+            if sum_exposure > max_leverage:
+                port_weights.iloc[t] = port_weights.iloc[t] / sum_exposure * max_leverage
+            if t < T - 1:
+                ret_long_components = (
+                    port_weights.iloc[t].fillna(0).values
+                    * indicators_df.iloc[t + 1].filter(like='ret_').fillna(0).values
+                )
+                ret_long = sum(ret_long_components)
+                port.loc[date, 'ret_long'] = ret_long
+                ret_tbill = (1 - port_weights.iloc[t].sum()) * indicators_df.iloc[t + 1]['tbill_ret']
+                port.loc[date, 'ret_tbill'] = ret_tbill
+                if invest_cash == 'YES':
+                    port.loc[date, 'ret_long'] += ret_tbill
+        shares = port_weights.iloc[t] * aum / prices[t]
+        all_time_shares.append(shares)
+
+    for i in range(N_ind):
+        port[f'weight_{i + 1}'] = port_weights.iloc[:, i]
+
+    port['AUM'] = all_time_aum
+    port['Fees'] = pd.Series(all_time_fees, index=port.index).cumsum()
+    port['Cash'] = (1 - port[[f'weight_{i + 1}' for i in range(N_ind)]].sum(axis=1)) * port['AUM']
+    port['Borrowed'] = np.minimum(0, port['Cash']).abs()
+    port['Cash'] = np.maximum(0, port['Cash'])
 
     benchmark_returns = pd.DataFrame(benchmark_prices.groupby(pd.Grouper(freq='ME')).nth(-1).pct_change() * 100).rename(
         columns={job.benchmark: 'Return'})
@@ -252,8 +345,8 @@ def trend_following_strategy(job: schemas.IndustryTrendsJobBase) -> TrendFollowi
     benchmark_returns = benchmark_returns.pivot(index='Year', columns='Month', values='Return')
     benchmark_returns = ((1 + benchmark_returns / 100).prod(axis=1) - 1) * 100
 
-    monthly_returns = pd.DataFrame(equity.groupby(pd.Grouper(freq='ME')).nth(-1).pct_change() * 100).rename(
-        columns={0: 'Return'})
+    monthly_returns = pd.DataFrame(port['AUM'].groupby(pd.Grouper(freq='ME')).nth(-1).pct_change() * 100).rename(
+        columns={'AUM': 'Return'})
     monthly_returns.index.name = 'Date'
     monthly_returns['Year'] = monthly_returns.index.year
     monthly_returns['Month'] = monthly_returns.index.month
@@ -270,50 +363,44 @@ def trend_following_strategy(job: schemas.IndustryTrendsJobBase) -> TrendFollowi
     monthly_returns['Yearly'] = ((1 + monthly_returns / 100).prod(axis=1) - 1) * 100
     monthly_returns[f'Benchmark ({job.benchmark})'] = benchmark_returns
 
-    trades = shares.diff().fillna(0)
-    trades = trades.loc[~(trades == 0).all(axis=1)]
-    trades = trades.astype(str)
-    trades.index.name = 'Date'
+    weights = port.filter(like='weight_').copy()
+    weights.rename(columns={f'weight_{i + 1}': job.tickers[i] for i in range(len(job.tickers))}, inplace=True)
 
-    signals = pd.DataFrame.from_dict(signals, orient='index')
-    signals = ('(' + signals + ')').fillna('')
-    signals = signals.loc[~(signals == '').all(axis=1)]
-    trades = trades.astype(str) + ' ' + signals.reindex(trades.index).fillna('')
+    # shares = pd.DataFrame(all_time_shares)
+    trades = pd.DataFrame(all_time_trades)
 
     drawdowns = pd.DataFrame()
-    def compute_drawdown(col: str):
-        running_max = balance[col].cummax()
-        drawdown_pct = (balance[col] - running_max) / running_max * 100
+    def compute_drawdown(series: pd.Series | np.ndarray) -> str:
+        running_max = np.maximum.accumulate(series)
+        drawdown_pct = (series - running_max) / running_max * 100
         mdd = drawdown_pct.min()
         return f'{round(mdd, 2)}%'
-    drawdowns['Max Strategy Drawdown'] = [compute_drawdown('Equity')]
-    drawdowns[f'Max {job.benchmark} Drawdown'] = [compute_drawdown(job.benchmark)]
+
+    drawdowns['Strategy Drawdown'] = [compute_drawdown(port['AUM'])]
+    for j in range(len(job.tickers)):
+        ticker = job.tickers[j]
+        ticker_prices = prices[:, j]
+        drawdowns[ticker] = compute_drawdown(np.where(np.isnan(ticker_prices), 0, ticker_prices))
+    drawdowns[f'{job.benchmark} Drawdown'] = [compute_drawdown(benchmark_prices)]
+
+    trades['Date'] = port.index
+    trades.set_index('Date', inplace=True)
+    trades = trades.loc[~(trades == 0).all(axis=1)]
 
     return TrendFollowingResults(
-        weights=weights[job.start_date:],
-        positions=positions[job.start_date:],
-        trailing_stop=trailing_stop[job.start_date:],
-        cash=cash[job.start_date:],
-        borrowed=borrowed[job.start_date:],
-        shares=shares[job.start_date:],
-        holdings=holdings[job.start_date:],
-        equity=equity[job.start_date:],
-        balance=balance[job.start_date:],
-        tx_costs=tx_costs[job.start_date:],
-        monthly_returns=monthly_returns,
-        trades=trades[job.start_date:],
+        indicators_df=indicators_df,
+        portfolio=port,
+        returns=monthly_returns,
+        trades=trades,
         drawdowns=drawdowns,
-        signals=signals[job.start_date:],
-        channels=channels[job.start_date:],
-        keltner_channels=keltner_channels[job.start_date:],
-        donchian_channels=donchian_channels[job.start_date:],
     )
 
 
 def save_results(id: int, results: TrendFollowingResults):
     it_results_dir = ROOT_DIR / 'static' / 'it_results'
-    results.balance.to_csv(it_results_dir / f'{id}-balance.csv')
-    results.monthly_returns.to_csv(it_results_dir / f'{id}-monthly_returns.csv')
+    results.portfolio.to_csv(it_results_dir / f'{id}-portfolio.csv')
+    results.indicators_df.to_csv(it_results_dir / f'{id}-indicators.csv')
+    results.returns.to_csv(it_results_dir / f'{id}-returns.csv')
     results.trades.to_csv(it_results_dir / f'{id}-trades.csv')
     results.drawdowns.to_csv(it_results_dir / f'{id}-drawdowns.csv', index=False)
 
@@ -330,10 +417,15 @@ class JobViewModel:
 
 def load_results(job: schemas.IndustryTrendsJob) -> JobViewModel:
     it_results_dir = ROOT_DIR / 'static' / 'it_results'
-    balance = pd.read_csv(it_results_dir / f'{job.id}-balance.csv').set_index('Date')
-    returns = pd.read_csv(it_results_dir / f'{job.id}-monthly_returns.csv').set_index('Year').fillna('')
+    portfolio = pd.read_csv(it_results_dir / f'{job.id}-portfolio.csv').set_index('Date')
+    indicators = pd.read_csv(it_results_dir / f'{job.id}-indicators.csv').set_index('Date')
+    returns = pd.read_csv(it_results_dir / f'{job.id}-returns.csv').set_index('Year').fillna('')
     trades = pd.read_csv(it_results_dir / f'{job.id}-trades.csv').set_index('Date')
     drawdowns = pd.read_csv(it_results_dir / f'{job.id}-drawdowns.csv')
+
+    balance = portfolio[['AUM', 'Cash', 'Borrowed', job.benchmark]].copy()
+    balance.rename(columns={'AUM': 'Equity'}, inplace=True)
+    balance['Holdings'] = portfolio['sum_exposure'] * portfolio['AUM'].values
 
     trades_count = trades.astype(bool).sum().sum()
 

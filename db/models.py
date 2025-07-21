@@ -3,7 +3,6 @@ from sqlalchemy.orm import declarative_base
 from sqlalchemy import func
 
 
-
 Base = declarative_base()
 
 

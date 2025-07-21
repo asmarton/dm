@@ -236,14 +236,16 @@ def rebalance_multi(
     sam_lookback_returns: pd.Series | None,
     monthly_returns: pd.DataFrame,
     holdings: pd.DataFrame,
-    balance: float
+    balance: float,
 ) -> tuple[list[str], pd.Series, pd.Series, float, float]:
     market_returns = market_lookback_returns.iloc[idx]
     tbills_returns = tbills_lookback_returns.iloc[idx]
     # Relative momentum
     best_assets = market_returns.nlargest(job.max_assets).index.tolist()
 
-    should_enter_sam = job.single_absolute_momentum is not None and sam_lookback_returns.iloc[idx] > tbills_returns[tbills_symbol]
+    should_enter_sam = (
+        job.single_absolute_momentum is not None and sam_lookback_returns.iloc[idx] > tbills_returns[tbills_symbol]
+    )
     eligible_assets = market_returns.loc[best_assets]
     eligible_assets = eligible_assets[eligible_assets > tbills_returns[tbills_symbol]].index.tolist()
     should_enter = should_enter_sam if job.single_absolute_momentum is not None else len(eligible_assets) > 0
@@ -268,7 +270,13 @@ def rebalance_multi(
 
     if len(selected_assets) < job.max_assets:
         selected_assets.append(job.safe_asset)
-    return selected_assets, new_holdings, trades, balance, fees.sum(),
+    return (
+        selected_assets,
+        new_holdings,
+        trades,
+        balance,
+        fees.sum(),
+    )
 
 
 @dataclass
@@ -334,7 +342,14 @@ def dual_momentum_multi(job: JobBase) -> DualMomentumMultiResults:
     balance = job.initial_investment
     old_balance = balance
     selected_assets, new_holdings, new_trades, balance, switching_cost = rebalance_multi(
-        job, job.lookback_period, market_lookback_returns, tbills_lookback_returns, sam_lookback_returns, monthly_returns, holdings, balance
+        job,
+        job.lookback_period,
+        market_lookback_returns,
+        tbills_lookback_returns,
+        sam_lookback_returns,
+        monthly_returns,
+        holdings,
+        balance,
     )
     holdings.loc[monthly_returns.index[job.lookback_period + 1]] = new_holdings
     trades.loc[monthly_returns.index[job.lookback_period + 1]] = new_trades
@@ -346,7 +361,6 @@ def dual_momentum_multi(job: JobBase) -> DualMomentumMultiResults:
     sam_lookback_returns = sam_lookback_returns.iloc[1:] if sam_lookback_returns is not None else None
     tbills_lookback_returns = tbills_lookback_returns.iloc[1:]
     holdings = holdings.iloc[1:]
-
 
     portfolio = pd.DataFrame(
         index=monthly_returns.index,
@@ -365,12 +379,26 @@ def dual_momentum_multi(job: JobBase) -> DualMomentumMultiResults:
         new_holdings = new_holdings * (1 + monthly_returns.loc[date])
         holdings.loc[date] = new_holdings
         balance = new_holdings.sum()
-        portfolio.loc[date] = [','.join(selected_assets), (balance - old_balance) / old_balance, switching_cost, balance]
+        portfolio.loc[date] = [
+            ','.join(selected_assets),
+            (balance - old_balance) / old_balance,
+            switching_cost,
+            balance,
+        ]
         trades.iloc[i] = new_trades
 
         if (i - job.lookback_period) % job.rebalance_period == 0:
             old_balance = balance
-            selected_assets, new_holdings, new_trades, balance, switching_cost = rebalance_multi(job, i, market_lookback_returns, tbills_lookback_returns, sam_lookback_returns, monthly_returns, holdings, balance)
+            selected_assets, new_holdings, new_trades, balance, switching_cost = rebalance_multi(
+                job,
+                i,
+                market_lookback_returns,
+                tbills_lookback_returns,
+                sam_lookback_returns,
+                monthly_returns,
+                holdings,
+                balance,
+            )
 
     # Cut portfolio to real start date.
     portfolio = portfolio[job.lookback_period :]
@@ -407,7 +435,7 @@ def job_results_paths(job_id: int) -> tuple[str, str, str]:
     results_dir = ROOT_DIR / 'static' / 'results'
     portfolio_path = results_dir / f'{job_id}-portfolio.csv'
     trades_path = results_dir / f'{job_id}-trades.csv'
-    ticker_info_path = results_dir/ f'{job_id}-ticker-info.json'
+    ticker_info_path = results_dir / f'{job_id}-ticker-info.json'
     return portfolio_path, trades_path, ticker_info_path
 
 
@@ -481,9 +509,11 @@ def compare_performance(job: schemas.JobBase) -> tuple[pd.DataFrame, datetime, d
             trades_count = results.trades.astype(bool).sum(axis=1).sum()
         start_date = results.portfolio.index[0]
         end_date = results.portfolio.index[-1]
-        perfs[max_assets] = {'Balance': results.portfolio.iloc[-1]['Dual Momentum Balance'],
-                             'Drawdown': compute_drawdowns(results.portfolio).loc[
-                                 0, 'Dual Momentum Maximum Drawdown'], 'Trades': trades_count}
+        perfs[max_assets] = {
+            'Balance': results.portfolio.iloc[-1]['Dual Momentum Balance'],
+            'Drawdown': compute_drawdowns(results.portfolio).loc[0, 'Dual Momentum Maximum Drawdown'],
+            'Trades': trades_count,
+        }
     df = pd.DataFrame.from_dict(perfs, orient='index')
     df.index.name = 'Max Assets'
     return df, start_date, end_date

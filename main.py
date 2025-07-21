@@ -169,7 +169,7 @@ async def dm_compare_perf(request: Request, data: Annotated[JobFormData, Form()]
             'benchmark_ticker': benchmark_ticker,
             'start_date': start_date,
             'end_date': end_date,
-        }
+        },
     )
 
 
@@ -184,8 +184,10 @@ async def industry_trends_index(request: Request):
 
 
 @app.post('/industry-trends', response_class=HTMLResponse)
-async def industry_trends_create(request: Request, session: SessionDep, payload: Annotated[schemas.IndustryTrendsJobBase, Form()]):
-    results = it.trend_following_strategy(payload)
+async def industry_trends_create(
+    request: Request, session: SessionDep, payload: Annotated[schemas.IndustryTrendsJobBase, Form()]
+):
+    results = it.timing_etfs(payload)
 
     job = schemas.IndustryTrendsJobCreate(
         initial_balance=payload.initial_balance,

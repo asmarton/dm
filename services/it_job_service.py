@@ -3,7 +3,10 @@ from sqlalchemy.orm import Session
 import utils
 from db import schemas, models
 
-def get_jobs_paginated(db: Session, limit: int, offset: int, user: str | None = None) -> list[type[models.IndustryTrendsJob]]:
+
+def get_jobs_paginated(
+    db: Session, limit: int, offset: int, user: str | None = None
+) -> list[type[models.IndustryTrendsJob]]:
     query = db.query(models.IndustryTrendsJob)
     if user is not None:
         query = query.where(models.IndustryTrendsJob.user == user)
