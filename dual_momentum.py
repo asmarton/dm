@@ -2,6 +2,7 @@ import json
 import pathlib
 import re
 from datetime import datetime
+from itertools import groupby
 
 import fastapi.encoders
 import pandas as pd
@@ -156,7 +157,7 @@ def dual_momentum(job: JobBase) -> DualMomentumResults:
     else:
         lookback_returns = (1 + monthly_returns).rolling(job.lookback_period).apply(lambda x: x.prod()) - 1
 
-    market_lookback_returns = lookback_returns[tickers]
+    market_lookback_returns = lookback_returns[list(set(tickers))]
     sam_lookback_returns = (
         lookback_returns[job.single_absolute_momentum] if job.single_absolute_momentum is not None else None
     )
@@ -256,9 +257,17 @@ def rebalance_multi(
     else:
         selected_assets = []
 
+    selected_asset_groups = groupby(selected_assets, lambda t: t.split('_')[0])
+    selected_parent_assets = []
+    asset_share = {}
+    for key, group in selected_asset_groups:
+        selected_parent_assets.append(key)
+        asset_share[key] = len(list(group))
+
     prev_holdings = holdings.iloc[idx]
     new_holdings = pd.Series(index=monthly_returns.columns, data=0.0)
-    new_holdings[selected_assets] = 1 / job.max_assets * balance
+    if len(selected_parent_assets) > 0:
+        new_holdings[selected_parent_assets] = pd.Series(asset_share) / job.max_assets * balance
     new_holdings[job.safe_asset] = (job.max_assets - len(selected_assets)) / job.max_assets * balance
     trades = new_holdings - prev_holdings
     bought = trades.copy()
@@ -302,16 +311,41 @@ def dual_momentum_multi(job: JobBase) -> DualMomentumMultiResults:
     monthly_returns = pd.DataFrame(columns=['Date'], index=pd.DatetimeIndex([]))
     monthly_returns.set_index('Date', inplace=True)
 
+    if job.safe_asset in tickers:
+        raise RuntimeError('Safe assets cannot be in the ticker list')
+
+    ticker_translation = {}
+    ticker_count = {}
+    saved_tickers = set()
+    for ticker in tickers:
+        if ticker not in saved_tickers:
+            saved_tickers.add(ticker)
+            ticker_count[ticker] = 1
+            ticker_translation[ticker] = ticker
+        else:
+            ticker_count[ticker] += 1
+            new_ticker = f'{ticker}_{ticker_count[ticker]}'
+            ticker_translation[new_ticker] = ticker
+            saved_tickers.add(new_ticker)
+    tickers = list(saved_tickers)
+
     all_tickers = tickers + [job.safe_asset]
+    ticker_translation[job.safe_asset] = job.safe_asset
+
     if job.single_absolute_momentum is not None:
         all_tickers = all_tickers + [job.single_absolute_momentum]
-    all_tickers = list(set(all_tickers))
+        ticker_translation[job.single_absolute_momentum] = job.single_absolute_momentum
+    all_tickers = sorted(list(set(all_tickers)))
 
     ticker_info: list[TickerInfo] = []
+    existing_ticker_info = set()
 
     for ticker in all_tickers:
-        ticker_monthly_returns, info = compute_monthly_returns_with_fallback(ticker)
-        ticker_info.append(info)
+        ticker_monthly_returns, info = compute_monthly_returns_with_fallback(ticker_translation[ticker])
+        if ticker_translation[ticker] not in existing_ticker_info:
+            ticker_info.append(info)
+            existing_ticker_info.add(ticker_translation[ticker])
+        ticker_monthly_returns.rename(columns={ticker_translation[ticker]: ticker}, inplace=True)
         monthly_returns = pd.merge(monthly_returns, ticker_monthly_returns, on='Date', how='outer')
 
     tbills_monthly_returns = get_tbills()
