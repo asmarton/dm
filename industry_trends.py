@@ -70,7 +70,7 @@ def timing_etfs(job: schemas.IndustryTrendsJobBase) -> TrendFollowingResults:
     rebalance_threshold = job.rebalance_threshold / 100
 
     price_dfs = []
-    for ticker in etfs:
+    for ticker in job.tickers:
         price_dfs.append(utils.get_closing_prices(ticker))
     benchmark_prices = utils.get_closing_prices(job.benchmark)[job.start_date:job.end_date]
     price_dfs.append(benchmark_prices)
