@@ -1,6 +1,7 @@
 import logging
 import re
 from datetime import datetime
+from dateutil.relativedelta import relativedelta
 from http import HTTPStatus
 from typing import Annotated
 
@@ -170,6 +171,34 @@ async def dm_compare_perf(request: Request, data: Annotated[JobFormData, Form()]
             'start_date': start_date,
             'end_date': end_date,
         },
+    )
+
+
+@app.post('/dm/allocate', response_class=HTMLResponse)
+async def dm_allocate(request: Request, data: Annotated[JobFormData, Form()]):
+    end_date = datetime.today().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    data.end_date = datetime.strftime(end_date, '%Y-%m')
+    data.start_date = datetime.strftime(datetime.today() - relativedelta(months=data.lookback_period), '%Y-%m')
+    job = job_form_data_to_schema(data)
+
+    if data.max_assets > 1:
+        results = dm.dual_momentum_multi(job)
+        positions = results.last_selected_assets
+    else:
+        results = dm.dual_momentum(job)
+        positions = [results.last_selected_asset]
+    lookback_returns = (round(((1 + results.portfolio.filter(like='Return')).cumprod() - 1).iloc[-1:] * 100, 2)).astype(str) + '%'
+    lookback_returns.drop('Dual Momentum Return', axis=1, inplace=True)
+
+    return templates.TemplateResponse(
+        request=request,
+        name='allocation.html.jinja',
+        context={
+            'date': end_date,
+            'positions': positions,
+            'lookback_returns': lookback_returns,
+            'lookback_period': job.lookback_period,
+        }
     )
 
 

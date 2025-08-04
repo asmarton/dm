@@ -6,11 +6,11 @@ from itertools import groupby
 
 import fastapi.encoders
 import pandas as pd
+import pandas_datareader as pdr
 from dateutil.relativedelta import relativedelta
 from pydantic import BaseModel
 from dataclasses import dataclass
 
-import db.models
 import db.schemas as schemas
 import utils
 from db.schemas import JobBase
@@ -27,9 +27,24 @@ class TickerInfo(BaseModel):
 
 def get_tbills() -> pd.DataFrame:
     path = pathlib.Path(ROOT_DIR) / 'data' / f'{tbills_symbol}.csv'
-    dgs3mo = pd.read_csv(path).dropna().set_index('Date')
-    dgs3mo.index = pd.to_datetime(dgs3mo.index)
-    tbill_yield = dgs3mo.groupby(pd.Grouper(freq='ME')).nth(-1)
+    should_refresh = False
+
+    if path.exists():
+        yields = pd.read_csv(path).dropna().set_index('Date')
+        yields.index = pd.to_datetime(yields.index)
+        last_yield_date = yields.index[-1]
+        if last_yield_date < datetime.now() and last_yield_date.month != datetime.now().month:
+            # If different month, download more data
+            should_refresh = True
+    else:
+        should_refresh = True
+
+    if should_refresh:
+        yields = pdr.get_data_fred(tbills_symbol, datetime(1980, 1, 1), datetime.today())
+        yields.index.name = 'Date'
+        yields.to_csv(path)
+
+    tbill_yield = yields.groupby(pd.Grouper(freq='ME')).nth(-1)
     tbill_monthly_return = (1 + tbill_yield / 100) ** (1 / 12) - 1
     return tbill_monthly_return
 
@@ -114,6 +129,7 @@ class DualMomentumResults:
     portfolio: pd.DataFrame
     trades: pd.DataFrame
     ticker_info: list[TickerInfo]
+    last_selected_asset: str
 
 
 def dual_momentum(job: JobBase) -> DualMomentumResults:
@@ -193,6 +209,7 @@ def dual_momentum(job: JobBase) -> DualMomentumResults:
         ],
     )
 
+    last_selected_asset = selected_asset
     # Rebalancing is made at the end of the month.
     for i in range(job.lookback_period, len(monthly_returns.index)):
         date = monthly_returns.index[i]
@@ -210,6 +227,7 @@ def dual_momentum(job: JobBase) -> DualMomentumResults:
                 trades.loc[len(trades)] = [date, selected_asset, new_asset]
                 switched = True
             selected_asset = new_asset
+            last_selected_asset = selected_asset
 
     # Cut portfolio to real start date.
     portfolio = portfolio[job.lookback_period :]
@@ -226,7 +244,7 @@ def dual_momentum(job: JobBase) -> DualMomentumResults:
 
     trades.set_index('Trade Date', inplace=True)
 
-    return DualMomentumResults(portfolio, trades, ticker_info)
+    return DualMomentumResults(portfolio, trades, ticker_info, last_selected_asset)
 
 
 def rebalance_multi(
@@ -294,6 +312,7 @@ class DualMomentumMultiResults:
     holdings: pd.DataFrame
     trades: pd.DataFrame
     ticker_info: list[TickerInfo]
+    last_selected_assets: list[str]
 
 
 def dual_momentum_multi(job: JobBase) -> DualMomentumMultiResults:
@@ -406,6 +425,7 @@ def dual_momentum_multi(job: JobBase) -> DualMomentumMultiResults:
         ],
     )
 
+    last_selected_assets = selected_assets
     # Rebalancing is made at the end of the month.
     for i in range(job.lookback_period, len(monthly_returns.index)):
         date = monthly_returns.index[i]
@@ -433,6 +453,7 @@ def dual_momentum_multi(job: JobBase) -> DualMomentumMultiResults:
                 holdings,
                 balance,
             )
+            last_selected_assets = selected_assets
 
     # Cut portfolio to real start date.
     portfolio = portfolio[job.lookback_period :]
@@ -450,7 +471,7 @@ def dual_momentum_multi(job: JobBase) -> DualMomentumMultiResults:
 
     portfolio = portfolio.infer_objects()
 
-    return DualMomentumMultiResults(portfolio, holdings, trades, ticker_info)
+    return DualMomentumMultiResults(portfolio, holdings, trades, ticker_info, last_selected_assets)
 
 
 def humanize_portfolio(portfolio: pd.DataFrame) -> pd.DataFrame:
