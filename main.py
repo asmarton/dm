@@ -187,8 +187,6 @@ async def dm_allocate(request: Request, data: Annotated[JobFormData, Form()]):
     else:
         results = dm.dual_momentum(job)
         positions = [results.last_selected_asset]
-    lookback_returns = (round(((1 + results.portfolio.filter(like='Return')).cumprod() - 1).iloc[-1:] * 100, 2)).astype(str) + '%'
-    lookback_returns.drop('Dual Momentum Return', axis=1, inplace=True)
 
     return templates.TemplateResponse(
         request=request,
@@ -196,7 +194,7 @@ async def dm_allocate(request: Request, data: Annotated[JobFormData, Form()]):
         context={
             'date': end_date,
             'positions': positions,
-            'lookback_returns': lookback_returns,
+            'lookback_returns': round(results.market_lookback_returns.iloc[-1:] * 100, 2).astype(str) + '%',
             'lookback_period': job.lookback_period,
         }
     )

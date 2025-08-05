@@ -130,6 +130,7 @@ class DualMomentumResults:
     trades: pd.DataFrame
     ticker_info: list[TickerInfo]
     last_selected_asset: str
+    market_lookback_returns: pd.DataFrame
 
 
 def dual_momentum(job: JobBase) -> DualMomentumResults:
@@ -244,7 +245,7 @@ def dual_momentum(job: JobBase) -> DualMomentumResults:
 
     trades.set_index('Trade Date', inplace=True)
 
-    return DualMomentumResults(portfolio, trades, ticker_info, last_selected_asset)
+    return DualMomentumResults(portfolio, trades, ticker_info, last_selected_asset, market_lookback_returns)
 
 
 def rebalance_multi(
@@ -313,6 +314,7 @@ class DualMomentumMultiResults:
     trades: pd.DataFrame
     ticker_info: list[TickerInfo]
     last_selected_assets: list[str]
+    market_lookback_returns: pd.DataFrame
 
 
 def dual_momentum_multi(job: JobBase) -> DualMomentumMultiResults:
@@ -471,7 +473,7 @@ def dual_momentum_multi(job: JobBase) -> DualMomentumMultiResults:
 
     portfolio = portfolio.infer_objects()
 
-    return DualMomentumMultiResults(portfolio, holdings, trades, ticker_info, last_selected_assets)
+    return DualMomentumMultiResults(portfolio, holdings, trades, ticker_info, last_selected_assets, market_lookback_returns)
 
 
 def humanize_portfolio(portfolio: pd.DataFrame) -> pd.DataFrame:
