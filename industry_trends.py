@@ -402,6 +402,7 @@ def timing_etfs(job: schemas.IndustryTrendsJobBase) -> TrendFollowingResults:
         {False: '', True: '-D'})
 
     trades = trades.astype(str) + ' ' + (sig_down + sig_up).reindex(trades.index)
+    trades.rename(columns={col: etf for etf, col in zip(job.tickers, trades.columns)}, inplace=True)
 
     return TrendFollowingResults(
         indicators_df=indicators_df,
