@@ -387,6 +387,22 @@ def timing_etfs(job: schemas.IndustryTrendsJobBase) -> TrendFollowingResults:
     trades.set_index('Date', inplace=True)
     trades = trades.loc[~(trades == 0).all(axis=1)]
 
+    def rename_cols(df: pd.DataFrame) -> pd.DataFrame:
+        return df.rename(columns={c: i for c, i in zip(df.columns, range(len(df.columns)))})
+
+    donc_up = rename_cols(indicators_df.filter(like='donc_up').copy())
+    donc_down = rename_cols(indicators_df.filter(like='donc_down').copy())
+    kelt_up = rename_cols(indicators_df.filter(like='kelt_up').copy())
+    kelt_down = rename_cols(indicators_df.filter(like='kelt_down').copy())
+    prices = rename_cols(indicators_df.filter(like='price').copy())
+
+    sig_up = (prices > kelt_up.shift(1)).replace({False: '', True: '+K'}) + (prices > donc_up.shift(1)).replace(
+        {False: '', True: '+D'})
+    sig_down = (prices < kelt_down.shift(1)).replace({False: '', True: '-K'}) + (prices < donc_down.shift(1)).replace(
+        {False: '', True: '-D'})
+
+    trades = trades.astype(str) + ' ' + (sig_down + sig_up).reindex(trades.index)
+
     return TrendFollowingResults(
         indicators_df=indicators_df,
         portfolio=port,
