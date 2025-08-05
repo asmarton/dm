@@ -564,10 +564,13 @@ def compare_performance(job: schemas.JobBase) -> tuple[pd.DataFrame, datetime, d
             trades_count = results.trades.astype(bool).sum(axis=1).sum()
         start_date = results.portfolio.index[0]
         end_date = results.portfolio.index[-1]
+        balance = results.portfolio['Dual Momentum Balance']
+        cagr = ((balance.iloc[-1] / balance.iloc[0]) ** (12 / len(balance.index)) - 1) * 100
         perfs[max_assets] = {
             'Balance': results.portfolio.iloc[-1]['Dual Momentum Balance'],
             'Drawdown': compute_drawdowns(results.portfolio).loc[0, 'Dual Momentum Maximum Drawdown'],
             'Trades': trades_count,
+            'CAGR': cagr,
         }
     df = pd.DataFrame.from_dict(perfs, orient='index')
     df.index.name = 'Max Assets'
