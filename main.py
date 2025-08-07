@@ -86,9 +86,9 @@ def job_form_data_to_schema(data: JobFormData) -> schemas.JobCreate:
 
 @app.post('/')
 async def model(data: Annotated[JobFormData, Form()], session: SessionDep):
-    tickers_regex = r'^(\w+\s*,\s*)+(\w+)$'
-    if not re.match(tickers_regex, data.tickers):
-        raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail='Invalid tickers')
+    # tickers_regex = r'^(\w+\s*,\s*)+(\w+)$'
+    # if not re.match(tickers_regex, data.tickers):
+    #     raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail='Invalid tickers')
 
     job = job_form_data_to_schema(data)
 
