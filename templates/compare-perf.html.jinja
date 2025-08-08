@@ -7,6 +7,9 @@
 <p class="mb-2">
     {{ benchmark_ticker }} Balance: {{ benchmark }}
 </p>
+<p class="mb-2">
+    {{ benchmark_ticker }} CAGR: {{ benchmark_cagr }}
+</p>
 
 {{ perf.to_html() | safe }}
 

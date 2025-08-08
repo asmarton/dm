@@ -159,16 +159,19 @@ async def dm_compare_perf(request: Request, data: Annotated[JobFormData, Form()]
     job = job_form_data_to_schema(data)
     perf, start_date, end_date = dm.compare_performance(job)
     benchmark_ticker = data.benchmark or 'SPY'
-    benchmark, _ = dm.compute_monthly_returns_with_fallback(benchmark_ticker)
-    benchmark = benchmark.loc[start_date:end_date]
-    benchmark = data.initial_investment * (1 + benchmark).cumprod().iloc[-1]
+    benchmark_returns, _ = dm.compute_monthly_returns_with_fallback(benchmark_ticker)
+    benchmark_returns = benchmark_returns.loc[start_date:end_date]
+    benchmark = data.initial_investment * (1 + benchmark_returns).cumprod().iloc[-1]
     benchmark = benchmark[benchmark_ticker]
+    benchmark_cagr = ((benchmark / job.initial_investment) ** (12 / len(benchmark_returns.index)) - 1) * 100
+
     return templates.TemplateResponse(
         request=request,
         name='compare-perf.html.jinja',
         context={
             'perf': perf,
             'benchmark': round(benchmark, 2),
+            'benchmark_cagr': round(benchmark_cagr, 2),
             'benchmark_ticker': benchmark_ticker,
             'start_date': start_date,
             'end_date': end_date,
