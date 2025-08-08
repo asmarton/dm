@@ -5,6 +5,7 @@ from datetime import datetime
 from itertools import groupby
 
 import fastapi.encoders
+import numpy as np
 import pandas as pd
 import pandas_datareader as pdr
 from dateutil.relativedelta import relativedelta
@@ -257,6 +258,7 @@ def rebalance_multi(
     monthly_returns: pd.DataFrame,
     holdings: pd.DataFrame,
     balance: float,
+    prev_selected_assets: list[str],
 ) -> tuple[list[str], pd.Series, pd.Series, float, float]:
     market_returns = market_lookback_returns.iloc[idx]
     tbills_returns = tbills_lookback_returns.iloc[idx]
@@ -288,16 +290,24 @@ def rebalance_multi(
     if len(selected_parent_assets) > 0:
         new_holdings[selected_parent_assets] = pd.Series(asset_share) / job.max_assets * balance
     new_holdings[job.safe_asset] = (job.max_assets - len(selected_assets)) / job.max_assets * balance
+    if len(selected_assets) < job.max_assets:
+        selected_assets.append(job.safe_asset)
+
     trades = new_holdings - prev_holdings
     bought = trades.copy()
     bought[bought < 0] = 0
-    fees = bought * job.switching_cost / 100
-    new_holdings = new_holdings - fees
+
+    change = trades.abs().sum()
+    if change / prev_holdings.sum() < job.rebalance_threshold / 100 and sorted(selected_assets) == sorted(prev_selected_assets):
+        new_holdings = prev_holdings
+        fees = np.array(0)
+    else:
+        fees = bought * job.switching_cost / 100
+        new_holdings = new_holdings - fees
+
     balance = new_holdings.sum()
     trades = new_holdings - prev_holdings
 
-    if len(selected_assets) < job.max_assets:
-        selected_assets.append(job.safe_asset)
     return (
         selected_assets,
         new_holdings,
@@ -405,6 +415,7 @@ def dual_momentum_multi(job: JobBase) -> DualMomentumMultiResults:
         monthly_returns,
         holdings,
         balance,
+        []
     )
     holdings.loc[monthly_returns.index[job.lookback_period + 1]] = new_holdings
     trades.loc[monthly_returns.index[job.lookback_period + 1]] = new_trades
@@ -454,6 +465,7 @@ def dual_momentum_multi(job: JobBase) -> DualMomentumMultiResults:
                 monthly_returns,
                 holdings,
                 balance,
+                selected_assets,
             )
             last_selected_assets = selected_assets
 

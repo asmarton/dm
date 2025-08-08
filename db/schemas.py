@@ -17,6 +17,7 @@ class JobBase(BaseModel):
     single_absolute_momentum: str | None = None
     max_assets: int
     exclude_prev_month: bool
+    rebalance_threshold: float
     user: str = Field(min_length=1)
 
 

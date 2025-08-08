@@ -60,6 +60,7 @@ class JobFormData(BaseModel):
     switching_cost: float
     max_assets: int
     exclude_prev_month: bool = False
+    rebalance_threshold: float
     benchmark: str | None = None
 
 
@@ -80,6 +81,7 @@ def job_form_data_to_schema(data: JobFormData) -> schemas.JobCreate:
         single_absolute_momentum=data.single_absolute_momentum if data.single_absolute_momentum else None,
         max_assets=data.max_assets,
         exclude_prev_month=data.exclude_prev_month,
+        rebalance_threshold=data.rebalance_threshold,
         user=data.user,
     )
 
