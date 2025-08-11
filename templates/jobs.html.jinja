@@ -27,6 +27,8 @@
                 <th>Exclude Prev. Month</th>
                 <th>Rebalance Threshold</th>
                 <th>Switching Cost</th>
+                <th>CAGR</th>
+                <th>Drawdown</th>
                 <th>Returns</th>
                 <th>Trades</th>
                 <th>Created At</th>
@@ -50,6 +52,8 @@
                     <td>{{ job.exclude_prev_month }}</td>
                     <td>{{ job.rebalance_threshold }}</td>
                     <td>{{ job.switching_cost }}%</td>
+                    <td>{{ cagr[job.id] }}%</td>
+                    <td>{{ drawdown[job.id] }}</td>
                     <td><a href="/static/results/{{ job.id }}-portfolio.csv" download class="button !text-black !no-underline">Download ⬇</a></td>
                     <td><a href="/static/results/{{ job.id }}-trades.csv" download class="button !text-black !no-underline">Download ⬇</a></td>
                     <td>{{ job.created_at }}</td>

@@ -524,6 +524,7 @@ class JobViewModel:
     trades: pd.DataFrame
     drawdowns: pd.DataFrame
     ticker_info: list[TickerInfo]
+    cagr: float
 
 
 def compute_drawdowns(portfolio: pd.DataFrame) -> pd.DataFrame:
@@ -556,12 +557,16 @@ def load_results(job: schemas.Job) -> JobViewModel:
 
     drawdowns = compute_drawdowns(portfolio)
 
+    balance = portfolio['Dual Momentum Balance']
+    cagr = ((balance.iloc[-1] / job.initial_investment) ** (12 / len(balance.index)) - 1) * 100
+
     return JobViewModel(
         job=job,
         portfolio=portfolio,
         trades=trades,
         drawdowns=drawdowns,
         ticker_info=ticker_info,
+        cagr=cagr,
     )
 
 
