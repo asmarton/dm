@@ -55,6 +55,12 @@
             <div id="chart-container" class="w-full h-[25rem]"></div>
         </section>
 
+        <section>
+            <h2 class="text-2xl font-bold mb-4">CAGR</h2>
+            <p>Portfolio CAGR: {{ model.cagr }}%</p>
+            <p>Benchmark CAGR: {{ model.cagr_benchmark }}%</p>
+        </section>
+
         <section class="my-4">
             <h2 class="text-2xl font-bold mb-4">Returns</h2>
             {{ model.returns.to_html(index_names=False, table_id='returns') | safe }}

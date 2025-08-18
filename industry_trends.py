@@ -430,6 +430,8 @@ class JobViewModel:
     trades: pd.DataFrame
     trades_count: int
     drawdowns: pd.DataFrame
+    cagr: float
+    cagr_benchmark: float
 
 
 def load_results(job: schemas.IndustryTrendsJob) -> JobViewModel:
@@ -446,4 +448,11 @@ def load_results(job: schemas.IndustryTrendsJob) -> JobViewModel:
 
     trades_count = trades.astype(bool).sum().sum()
 
-    return JobViewModel(job, balance, returns, trades, trades_count, drawdowns)
+    equity = balance['Equity']
+    benchmark = balance[job.benchmark]
+    cagr = ((equity.iloc[-1] / job.initial_balance) ** (365 / len(equity.index)) - 1) * 100
+    cagr = round(cagr, 2)
+    cagr_benchmark = ((benchmark.iloc[-1] / job.initial_balance) ** (365 / len(benchmark.index)) - 1) * 100
+    cagr_benchmark = round(cagr_benchmark, 2)
+
+    return JobViewModel(job, balance, returns, trades, trades_count, drawdowns, cagr, cagr_benchmark)
