@@ -58,3 +58,7 @@ class IndustryTrendsJob(IndustryTrendsJobBase):
 
     id: int
     created_at: datetime
+
+
+class IndustryTrendsJobForm(IndustryTrendsJobBase):
+    tickers: str

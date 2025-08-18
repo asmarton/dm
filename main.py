@@ -228,8 +228,13 @@ async def industry_trends_index(request: Request):
 
 @app.post('/industry-trends', response_class=HTMLResponse)
 async def industry_trends_create(
-    request: Request, session: SessionDep, payload: Annotated[schemas.IndustryTrendsJobBase, Form()]
+    request: Request, session: SessionDep, payload: Annotated[schemas.IndustryTrendsJobForm, Form()]
 ):
+    payload = schemas.IndustryTrendsJobBase.model_validate({
+        **payload.model_dump(),
+        'tickers': utils.tickers_to_list(payload.tickers)
+    })
+
     results = it.timing_etfs(payload)
 
     job = schemas.IndustryTrendsJobCreate(

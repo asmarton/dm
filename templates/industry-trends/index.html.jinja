@@ -18,11 +18,7 @@
         <input id="initial_balance" name="initial_balance" type="number" step=".01" value="{{ query.initial_balance if query else 100000 }}" required>
 
         <label for="tickers">Tickers*</label>
-        <select id="tickers" name="tickers" multiple required>
-            {% for etf in etfs %}
-                <option value="{{ etf }}" {{ 'selected' if query and etf in query.tickers }}>{{ etf }}</option>
-            {% endfor %}
-        </select>
+        <input type="text" id="tickers" name="tickers" value="{{ query.tickers if query else '' }}" required>
 
         <label for="up_period">Upper band period (days)*</label>
         <input id="up_period" name="up_period" type="number" min="1" value="{{ query.up_period if query else 20 }}" required>
