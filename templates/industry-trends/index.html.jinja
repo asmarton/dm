@@ -9,10 +9,10 @@
         <input id="user" name="user" type="text" required value="{{ user if user else '' }}">
 
         <label for="start_date">Start Date*</label>
-        <input id="start_date" name="start_date" type="date" value="{{ query.start_date.strftime('%Y-%m-%d') if query }}" min="2002-01-01" max="2025-07-01" required>
+        <input id="start_date" name="start_date" type="date" value="{{ query.start_date.strftime('%Y-%m-%d') if query }}" required>
 
         <label for="end_date">End Date*</label>
-        <input id="end_date" name="end_date" type="date" value="{{ query.end_date.strftime('%Y-%m-%d') if query }}" min="2002-01-01" max="2025-07-01" required>
+        <input id="end_date" name="end_date" type="date" value="{{ query.end_date.strftime('%Y-%m-%d') if query }}" required>
 
         <label for="initial_balance">Initial Amount*</label>
         <input id="initial_balance" name="initial_balance" type="number" step=".01" value="{{ query.initial_balance if query else 100000 }}" required>
