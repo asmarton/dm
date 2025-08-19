@@ -73,16 +73,21 @@ def timing_etfs(job: schemas.IndustryTrendsJobBase) -> TrendFollowingResults:
     for ticker in job.tickers:
         price_dfs.append(utils.get_closing_prices(ticker))
     benchmark_prices = utils.get_closing_prices(job.benchmark)[job.start_date:job.end_date]
-    price_dfs.append(benchmark_prices)
+    if job.benchmark not in job.tickers:
+        price_dfs.append(benchmark_prices)
     prices = pd.concat(price_dfs, axis='columns')
     prices = prices[job.start_date : job.end_date]
     returns = prices.pct_change()
 
     caldt = prices.index
-    returns.rename(columns={job.benchmark: 'mkt_ret'}, inplace=True)
+    if job.benchmark not in job.tickers:
+        returns.rename(columns={job.benchmark: 'mkt_ret'}, inplace=True)
+    else:
+        returns['mkt_ret'] = returns[job.benchmark]
     returns['tbill_ret'] = kfrench.tbill_french_reconciled(caldt)
 
-    prices.drop(job.benchmark, axis=1, inplace=True)
+    if job.benchmark not in job.tickers:
+        prices.drop(job.benchmark, axis=1, inplace=True)
 
     # Determine the number of portfolios dynamically
     num_portfolios = returns.shape[1] - 2  # Subtracting 2 to account for 'mkt_ret' and 'tbill_ret'
