@@ -219,7 +219,10 @@ def timing_etfs(job: schemas.IndustryTrendsJobBase) -> TrendFollowingResults:
         # Update leverage and weights for active long positions
         active_longs = current_exposure == 1
         lev_vol = np.divide(target_vol, current_vols, out=np.zeros_like(current_vols), where=current_vols != 0)
-        ind_weight[t, active_longs] = lev_vol[active_longs]
+        if len(job.tickers) == 1:
+            ind_weight[t, active_longs] = 1
+        else:
+            ind_weight[t, active_longs] = lev_vol[active_longs]
 
     # Update the indicators dataframe
     # Collect new columns in a dictionary
