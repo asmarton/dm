@@ -1,5 +1,4 @@
 import logging
-import re
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
 from http import HTTPStatus
@@ -111,19 +110,21 @@ async def model(data: Annotated[JobFormData, Form()], session: SessionDep):
 
 
 @app.get('/jobs', response_class=HTMLResponse)
-async def jobs(request: Request, session: SessionDep, page: int = 0, user_filter: str | None = None):
+async def jobs(request: Request, session: SessionDep, page: int = 0, user_filter: str | None = None, sort_cagr: str | None = None, sort_drawdown: str | None = None):
     limit = 10
     offset = page * limit
     user_filter = user_filter or None
-    jobs = job_service.get_jobs_paginated(session, limit, offset, user_filter)
+    sort_cagr = sort_cagr or None
+    sort_drawdown = sort_drawdown or None
+
+    jobs = job_service.get_jobs_paginated(session, limit, offset, user_filter, sort_cagr, sort_drawdown)
     count = job_service.count_jobs(session, user_filter)
 
-    # TODO: Compute CAGR and Max Drawdown for each job
     cagr = {}
     drawdown = {}
     for job in jobs:
         view_model = dm.load_results(job)
-        cagr[job.id] = round(view_model.cagr, 2)
+        cagr[job.id] = round(job.cagr, 2)
         drawdown[job.id] = view_model.drawdowns.iloc[0]['Dual Momentum Maximum Drawdown']
 
     return templates.TemplateResponse(
@@ -136,6 +137,8 @@ async def jobs(request: Request, session: SessionDep, page: int = 0, user_filter
             'limit': limit,
             'offset': offset,
             'user_filter': user_filter,
+            'sort_cagr': sort_cagr,
+            'sort_drawdown': sort_drawdown,
             'cagr': cagr,
             'drawdown': drawdown,
         },
@@ -160,7 +163,7 @@ async def details(request: Request, session: SessionDep, job_id: int = 0):
             'trades': view_model.trades,
             'drawdowns': view_model.drawdowns,
             'ticker_info': view_model.ticker_info,
-            'cagr': view_model.cagr,
+            'cagr': job.cagr,
         },
     )
 

@@ -24,6 +24,8 @@ class Job(Base):
     max_assets = Column(Integer, nullable=False, default=1, server_default='1')
     exclude_prev_month = Column(Boolean, nullable=False, default=False, server_default='0')
     rebalance_threshold = Column(Double, nullable=False, default=0.0, server_default='0.0')
+    cagr = Column(Double, nullable=False, default=0.0, server_default='0.0')
+    drawdown = Column(Double, nullable=False, default=0.0, server_default='0.0')
     user = Column(String, nullable=False, server_default='*')
     created_at = Column(DateTime, nullable=False, server_default=func.now())
 

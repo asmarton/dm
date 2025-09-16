@@ -1,12 +1,35 @@
 <section id="jobs" class="my-6">
     <h2 class="text-2xl font-bold mb-3">Past jobs</h2>
 
-    <form class="my-3" hx-get="/jobs" hx-swap="outerHTML" hx-target="#jobs">
-        <label for="user_filter">User filter</label>
-        <input id="user_filter" name="user_filter" type="text" value="{{ user_filter if user_filter else '' }}">
+    <form class="mt-3 mb-5 flex flex-col gap-2" hx-get="/jobs" hx-swap="outerHTML" hx-target="#jobs">
+        <div>
+            <p class="font-semibold text-lg">Filters</p>
+            <label for="user_filter">User</label>
+            <input id="user_filter" name="user_filter" type="text" value="{{ user_filter if user_filter else '' }}">
+        </div>
 
-        <button type="submit">Filter</button>
-        <button type="button" hx-get="/jobs" hx-swap="outerHTML" hx-target="#jobs">Clear</button>
+        <div>
+            <p class="font-semibold text-lg">Sort</p>
+
+            <label for="sort_cagr">By CAGR</label>
+            <select id="sort_cagr" name="sort_cagr">
+                <option value="" {{ 'selected' if sort_cagr is none }}>-</option>
+                <option value="asc" {{ 'selected' if sort_cagr == 'asc' }}>ASC</option>
+                <option value="desc" {{ 'selected' if sort_cagr == 'desc' }}>DESC</option>
+            </select>
+
+            <label for="sort_drawdown">By Drawdown</label>
+            <select id="sort_drawdown" name="sort_drawdown">
+                <option value="" {{ 'selected' if sort_drawdown is none }}>-</option>
+                <option value="asc" {{ 'selected' if sort_drawdown == 'asc' }}>ASC</option>
+                <option value="desc" {{ 'selected' if sort_drawdown == 'desc' }}>DESC</option>
+            </select>
+        </div>
+
+        <div>
+            <button type="submit">Apply</button>
+            <button type="button" hx-get="/jobs" hx-swap="outerHTML" hx-target="#jobs">Clear</button>
+        </div>
     </form>
 
     <table>
@@ -21,14 +44,14 @@
                 <th>Tickers</th>
                 <th>Safe Asset</th>
                 <th><abbr title="Single Absolute Momentum">SAM</abbr></th>
+                <th>CAGR</th>
+                <th>Drawdown</th>
                 <th>Max Assets</th>
                 <th>Rebalance Period</th>
                 <th>Lookback Period</th>
                 <th>Exclude Prev. Month</th>
                 <th>Rebalance Threshold</th>
                 <th>Switching Cost</th>
-                <th>CAGR</th>
-                <th>Drawdown</th>
                 <th>Returns</th>
                 <th>Trades</th>
                 <th>Created At</th>
@@ -46,14 +69,14 @@
                     <td>{{ job.tickers }}</td>
                     <td>{{ job.safe_asset }}</td>
                     <td>{{ job.single_absolute_momentum if job.single_absolute_momentum is not none }}</td>
+                    <td>{{ cagr[job.id] }}%</td>
+                    <td>{{ drawdown[job.id] }}</td>
                     <td>{{ job.max_assets }}</td>
                     <td>{{ job.rebalance_period }}</td>
                     <td>{{ job.lookback_period }}</td>
                     <td>{{ job.exclude_prev_month }}</td>
                     <td>{{ job.rebalance_threshold }}</td>
                     <td>{{ job.switching_cost }}%</td>
-                    <td>{{ cagr[job.id] }}%</td>
-                    <td>{{ drawdown[job.id] }}</td>
                     <td><a href="/static/results/{{ job.id }}-portfolio.csv" download class="button !text-black !no-underline">Download ⬇</a></td>
                     <td><a href="/static/results/{{ job.id }}-trades.csv" download class="button !text-black !no-underline">Download ⬇</a></td>
                     <td>{{ job.created_at }}</td>

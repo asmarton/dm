@@ -1,12 +1,12 @@
 @import "tailwindcss";
 
 
-input {
+input, select {
     @apply border px-2 py-1;
 }
 
 td, th {
-    @apply border py-1 px-2;
+    @apply border py-1 px-2 text-nowrap;
 }
 
 table {

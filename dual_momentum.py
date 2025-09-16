@@ -537,7 +537,7 @@ def compute_drawdowns(portfolio: pd.DataFrame) -> pd.DataFrame:
             running_max = portfolio[balance_col].cummax()
             drawdown_pct = (portfolio[balance_col] - running_max) / running_max * 100
             mdd = drawdown_pct.min()
-            drawdowns[f'{asset} Maximum Drawdown'] = [f'{round(mdd, 2)}%']
+            drawdowns[f'{asset} Maximum Drawdown'] = [f'{round(abs(mdd), 2)}%']
     return drawdowns
 
 

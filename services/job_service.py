@@ -3,11 +3,27 @@ from sqlalchemy.orm import Session
 from db import schemas, models
 
 
-def get_jobs_paginated(db: Session, limit: int, offset: int, user: str | None = None) -> list[type[models.Job]]:
+def get_jobs_paginated(db: Session, limit: int, offset: int, user: str | None = None, sort_cagr: str | None = None, sort_drawdown: str | None = None) -> list[type[models.Job]]:
     query = db.query(models.Job)
     if user is not None:
         query = query.where(models.Job.user == user)
-    return query.order_by(models.Job.created_at.desc()).offset(offset).limit(limit).all()
+    if sort_cagr is None and sort_drawdown is None:
+        query = query.order_by(models.Job.created_at.desc())
+    else:
+        if sort_cagr == 'asc':
+            query = query.order_by(models.Job.cagr.asc())
+        elif sort_cagr == 'desc':
+            query = query.order_by(models.Job.cagr.desc())
+        if sort_drawdown == 'asc':
+            query = query.order_by(models.Job.drawdown.asc())
+        elif sort_drawdown == 'desc':
+            query = query.order_by(models.Job.drawdown.desc())
+    return query.offset(offset).limit(limit).all()
+
+
+def get_all_jobs(db: Session) -> list[type[models.Job]]:
+    query = db.query(models.Job)
+    return query.all()
 
 
 def get_job(db: Session, id: int) -> schemas.Job | None:
