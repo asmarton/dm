@@ -91,9 +91,9 @@
     </table>
 
     <div style="margin-top: 1rem;">
-        <button hx-get="/industry-trends/jobs/?page={{ page - 1 }}&user_filter={{ user_filter if user_filter else '' }}" hx-swap="outerHTML" hx-target="#jobs" {% if page == 0 %}disabled{% endif %}>Prev</button>
+        <button hx-get="/industry-trends/jobs/?page={{ page - 1 }}&user_filter={{ user_filter if user_filter else '' }}&sort_cagr={{ sort_cagr if sort_cagr else '' }}&sort_drawdown={{ sort_drawdown if sort_drawdown else '' }}" hx-swap="outerHTML" hx-target="#jobs" {% if page == 0 %}disabled{% endif %}>Prev</button>
         <span>Page {{ page + 1 }}/{{ (count / limit)|round(0, 'ceil')|int }}</span>
-        <button hx-get="/industry-trends/jobs?page={{ page + 1 }}&user_filter={{ user_filter if user_filter else '' }}" hx-swap="outerHTML" hx-target="#jobs" {% if page * limit + jobs|length >= count %}disabled{% endif %}>Next</button>
+        <button hx-get="/industry-trends/jobs?page={{ page + 1 }}&user_filter={{ user_filter if user_filter else '' }}&sort_cagr={{ sort_cagr if sort_cagr else '' }}&sort_drawdown={{ sort_drawdown if sort_drawdown else '' }}" hx-swap="outerHTML" hx-target="#jobs" {% if page * limit + jobs|length >= count %}disabled{% endif %}>Next</button>
         <span>Total {{ count }} jobs</span>
     </div>
 </section>
