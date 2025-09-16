@@ -48,6 +48,10 @@ class IndustryTrendsJobBase(BaseModel):
     trade_cost_min: float = 0.35
     rebalance_threshold: float = 10
     benchmark: str
+    cagr: float
+    drawdown: float
+    cagr_benchmark: float
+    drawdown_benchmark: float
     user: str = Field(min_length=1)
 
 
@@ -64,3 +68,7 @@ class IndustryTrendsJob(IndustryTrendsJobBase):
 
 class IndustryTrendsJobForm(IndustryTrendsJobBase):
     tickers: str
+    cagr: float = 0
+    drawdown: float = 0
+    cagr_benchmark: float = 0
+    drawdown_benchmark: float = 0

@@ -22,8 +22,7 @@ def get_jobs_paginated(db: Session, limit: int, offset: int, user: str | None = 
 
 
 def get_all_jobs(db: Session) -> list[type[models.Job]]:
-    query = db.query(models.Job)
-    return query.all()
+    return db.query(models.Job).all()
 
 
 def get_job(db: Session, id: int) -> schemas.Job | None:

@@ -82,6 +82,8 @@ def job_form_data_to_schema(data: JobFormData) -> schemas.JobCreate:
         exclude_prev_month=data.exclude_prev_month,
         rebalance_threshold=data.rebalance_threshold,
         user=data.user,
+        cagr=0,
+        drawdown=0,
     )
 
 
@@ -98,6 +100,9 @@ async def model(data: Annotated[JobFormData, Form()], session: SessionDep):
     else:
         results = dm.dual_momentum(job)
 
+    balance = results.portfolio['Dual Momentum Balance']
+    job.cagr = float(((balance.iloc[-1] / job.initial_investment) ** (12 / len(balance.index)) - 1) * 100)
+    job.drawdown = float(dm.compute_drawdowns(results.portfolio)['Dual Momentum Maximum Drawdown'][0][:-1])
     job.start_year = results.portfolio.index[0].year
     job.start_month = results.portfolio.index[0].month
     job = job_service.create_job(session, job)
@@ -255,9 +260,30 @@ async def industry_trends_create(
         rebalance_threshold=payload.rebalance_threshold,
         benchmark=payload.benchmark,
         user=payload.user,
+        cagr=0,
+        cagr_benchmark=0,
+        drawdown=0,
+        drawdown_benchmark=0,
     )
-    job = it_job_service.create_job(session, job)
 
+    equity = results.portfolio['AUM']
+    benchmark = results.portfolio[job.benchmark]
+    cagr = ((equity.iloc[-1] / job.initial_balance) ** (365 / len(equity.index)) - 1) * 100
+    cagr = round(cagr, 2)
+    cagr_benchmark = ((benchmark.iloc[-1] / job.initial_balance) ** (365 / len(benchmark.index)) - 1) * 100
+    cagr_benchmark = round(cagr_benchmark, 2)
+
+    drawdown = results.drawdowns.iloc[0]['Strategy Drawdown']
+    drawdown = float(drawdown[:-1])
+    drawdown_benchmark = results.drawdowns.iloc[0][f'{job.benchmark} Drawdown']
+    drawdown_benchmark = float(drawdown_benchmark[:-1].replace('\ndtype: float64', '').replace(job.benchmark, '').strip())
+
+    job.cagr = cagr
+    job.cagr_benchmark = cagr_benchmark
+    job.drawdown = abs(drawdown)
+    job.drawdown_benchmark = abs(drawdown_benchmark)
+
+    job = it_job_service.create_job(session, job)
     it.save_results(job.id, results)
 
     response = RedirectResponse('/industry-trends', status_code=HTTPStatus.FOUND)
@@ -284,11 +310,13 @@ async def industry_trends_details(request: Request, session: SessionDep, job_id:
 
 
 @app.get('/industry-trends/jobs', response_class=HTMLResponse)
-async def industry_trends_jobs(request: Request, session: SessionDep, page: int = 0, user_filter: str | None = None):
+async def industry_trends_jobs(request: Request, session: SessionDep, page: int = 0, user_filter: str | None = None, sort_cagr: str | None = None, sort_drawdown: str | None = None):
     limit = 10
     offset = page * limit
     user_filter = user_filter or None
-    jobs = it_job_service.get_jobs_paginated(session, limit, offset, user_filter)
+    sort_cagr = sort_cagr or None
+    sort_drawdown = sort_drawdown or None
+    jobs = it_job_service.get_jobs_paginated(session, limit, offset, user_filter, sort_cagr, sort_drawdown)
     count = it_job_service.count_jobs(session, user_filter)
 
     return templates.TemplateResponse(
@@ -301,5 +329,7 @@ async def industry_trends_jobs(request: Request, session: SessionDep, page: int 
             'limit': limit,
             'offset': offset,
             'user_filter': user_filter,
+            'sort_cagr': sort_cagr,
+            'sort_drawdown': sort_drawdown,
         },
     )

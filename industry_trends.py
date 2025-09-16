@@ -389,7 +389,7 @@ def timing_etfs(job: schemas.IndustryTrendsJobBase) -> TrendFollowingResults:
         ticker = job.tickers[j]
         ticker_prices = prices[:, j]
         drawdowns[ticker] = compute_drawdown(np.where(np.isnan(ticker_prices), 0, ticker_prices))
-    drawdowns[f'{job.benchmark} Drawdown'] = [compute_drawdown(benchmark_prices)]
+    drawdowns[f'{job.benchmark} Drawdown'] = [compute_drawdown(benchmark_prices[job.benchmark])]
 
     trades['Date'] = port.index
     trades.set_index('Date', inplace=True)
