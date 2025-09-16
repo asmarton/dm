@@ -116,7 +116,7 @@ async def model(data: Annotated[JobFormData, Form()], session: SessionDep):
 
 @app.get('/jobs', response_class=HTMLResponse)
 async def jobs(request: Request, session: SessionDep, page: int = 0, user_filter: str | None = None, sort_cagr: str | None = None, sort_drawdown: str | None = None):
-    limit = 10
+    limit = 25
     offset = page * limit
     user_filter = user_filter or None
     sort_cagr = sort_cagr or None
@@ -311,7 +311,7 @@ async def industry_trends_details(request: Request, session: SessionDep, job_id:
 
 @app.get('/industry-trends/jobs', response_class=HTMLResponse)
 async def industry_trends_jobs(request: Request, session: SessionDep, page: int = 0, user_filter: str | None = None, sort_cagr: str | None = None, sort_drawdown: str | None = None):
-    limit = 10
+    limit = 25
     offset = page * limit
     user_filter = user_filter or None
     sort_cagr = sort_cagr or None
