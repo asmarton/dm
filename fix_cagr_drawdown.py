@@ -15,12 +15,14 @@ for job in jobs:
     cagr = round(view_model.cagr, 2)
     drawdown = view_model.drawdowns.iloc[0]['Dual Momentum Maximum Drawdown']
     drawdown = float(drawdown[:-1])
-    db.query(models.Job).filter(models.Job.id == job.id).update({
-        'cagr': cagr,
-        'drawdown': abs(drawdown),
-    })
-
-db.commit()
+    try:
+        db.query(models.Job).filter(models.Job.id == job.id).update({
+            'cagr': cagr,
+            'drawdown': abs(drawdown),
+        })
+        db.commit()
+    except Exception as e:
+        print('ERROR: ', e)
 
 
 print(f'Fixed {len(jobs)} DM jobs')
@@ -36,14 +38,17 @@ for job in jobs:
     drawdown = float(drawdown[:-1])
     drawdown_benchmark = float(drawdown_benchmark[:-1].replace('\ndtype: float64', '').replace(job.benchmark, '').strip())
 
-    db.query(models.IndustryTrendsJob).filter(models.IndustryTrendsJob.id == job.id).update({
-        'cagr': view_model.cagr,
-        'drawdown': abs(drawdown),
-        'cagr_benchmark': view_model.cagr_benchmark,
-        'drawdown_benchmark': abs(drawdown_benchmark),
-    })
+    try:
+        db.query(models.IndustryTrendsJob).filter(models.IndustryTrendsJob.id == job.id).update({
+            'cagr': view_model.cagr,
+            'drawdown': abs(drawdown),
+            'cagr_benchmark': view_model.cagr_benchmark,
+            'drawdown_benchmark': abs(drawdown_benchmark),
+        })
+        db.commit()
+    except Exception as e:
+        print('ERROR: ', e)
 
 
-db.commit()
 print(f'Fixed {len(jobs)} IT jobs')
 db.close()
