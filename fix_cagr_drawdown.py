@@ -36,10 +36,13 @@ for job in jobs:
     benchmark_drawdown_pct = (benchmark_monthly_closes - benchmark_running_max) / benchmark_running_max * 100
     job.drawdown_benchmark = abs(round(benchmark_drawdown_pct.min(), 2))
 
+    job.trades = len(view_model.trades)
+
     try:
         db.query(models.Job).filter(models.Job.id == job.id).update({
             'cagr': cagr,
             'drawdown': abs(drawdown),
+            'trades': job.trades,
         })
         db.commit()
     except Exception as e:

@@ -90,6 +90,7 @@ def job_form_data_to_schema(data: JobFormData) -> schemas.JobCreate:
         cagr_benchmark=0,
         drawdown_benchmark=0,
         benchmark=data.benchmark,
+        trades=0
     )
 
 
@@ -125,6 +126,8 @@ async def model(data: Annotated[JobFormData, Form()], session: SessionDep):
     benchmark_running_max = np.maximum.accumulate(benchmark_monthly_closes)
     benchmark_drawdown_pct = (benchmark_monthly_closes - benchmark_running_max) / benchmark_running_max * 100
     job.drawdown_benchmark = abs(round(benchmark_drawdown_pct.min(), 2))
+
+    job.trades = len(results.trades)
 
     job.start_year = results.portfolio.index[0].year
     job.start_month = results.portfolio.index[0].month

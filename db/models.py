@@ -29,6 +29,7 @@ class Job(Base):
     cagr_benchmark = Column(Double, nullable=False, default=0.0, server_default='0.0')
     drawdown_benchmark = Column(Double, nullable=False, default=0.0, server_default='0.0')
     benchmark = Column(String, nullable=False, default='SPY', server_default='SPY')
+    trades = Column(Integer, nullable=False, default=0, server_default='0')
     user = Column(String, nullable=False, server_default='*')
     created_at = Column(DateTime, nullable=False, server_default=func.now())
 

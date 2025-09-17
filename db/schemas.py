@@ -23,6 +23,7 @@ class JobBase(BaseModel):
     drawdown: float
     cagr_benchmark: float
     drawdown_benchmark: float
+    trades: int
     user: str = Field(min_length=1)
 
 
