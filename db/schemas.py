@@ -18,8 +18,11 @@ class JobBase(BaseModel):
     max_assets: int
     exclude_prev_month: bool
     rebalance_threshold: float
+    benchmark: str
     cagr: float
     drawdown: float
+    cagr_benchmark: float
+    drawdown_benchmark: float
     user: str = Field(min_length=1)
 
 

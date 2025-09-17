@@ -48,7 +48,10 @@
             <h2 class="text-2xl font-bold mb-4">Balance evolution</h2>
             <div id="chart-container" class="w-full h-[25rem]"></div>
 
-            <p class="mt-6 text-lg"><span class="font-bold">CAGR:</span> {{ cagr | round(2) }}%</p>
+            <p class="mt-6 text-lg"><span class="font-bold">CAGR:</span> {{ job.cagr | round(2) }}%</p>
+            <p class="text-lg"><span class="font-bold">Drawdown:</span> {{ job.drawdown | round(2) }}%</p>
+            <p class="text-lg"><span class="font-bold">Benchmark ({{ job.benchmark }}) CAGR:</span> {{ job.cagr_benchmark | round(2) }}%</p>
+            <p class="text-lg"><span class="font-bold">Benchmark ({{ job.benchmark }}) Drawdown:</span> {{ job.drawdown_benchmark | round(2) }}%</p>
         </section>
 
         <section>

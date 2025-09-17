@@ -1,9 +1,13 @@
+import pandas as pd
+
 import dual_momentum as dm
 import industry_trends as it
 import services.job_service as job_service
+import utils
 from db import models
 from db.database import SessionLocal
 from services import it_job_service
+import numpy as np
 
 db = SessionLocal()
 
@@ -15,6 +19,23 @@ for job in jobs:
     cagr = round(view_model.cagr, 2)
     drawdown = view_model.drawdowns.iloc[0]['Dual Momentum Maximum Drawdown']
     drawdown = float(drawdown[:-1])
+
+    start_date = view_model.portfolio['Date'].iloc[0]
+    end_date = view_model.portfolio['Date'].iloc[-1]
+
+    benchmark_returns, _ = dm.compute_monthly_returns_with_fallback(job.benchmark)
+    benchmark_returns = benchmark_returns.loc[start_date:end_date]
+    benchmark = job.initial_investment * (1 + benchmark_returns).cumprod().iloc[-1]
+    benchmark = benchmark[job.benchmark]
+    job.cagr_benchmark = round(((benchmark / job.initial_investment) ** (12 / len(benchmark_returns.index)) - 1) * 100, 2)
+
+    benchmark_prices = utils.get_closing_prices(job.benchmark)
+    benchmark_prices = benchmark_prices[start_date:end_date]
+    benchmark_monthly_closes = benchmark_prices.groupby(pd.Grouper(freq='ME')).nth(-1)
+    benchmark_running_max = np.maximum.accumulate(benchmark_monthly_closes)
+    benchmark_drawdown_pct = (benchmark_monthly_closes - benchmark_running_max) / benchmark_running_max * 100
+    job.drawdown_benchmark = abs(round(benchmark_drawdown_pct.min(), 2))
+
     try:
         db.query(models.Job).filter(models.Job.id == job.id).update({
             'cagr': cagr,

@@ -1,5 +1,8 @@
 import logging
 from datetime import datetime
+
+import numpy as np
+import pandas as pd
 from dateutil.relativedelta import relativedelta
 from http import HTTPStatus
 from typing import Annotated
@@ -84,6 +87,9 @@ def job_form_data_to_schema(data: JobFormData) -> schemas.JobCreate:
         user=data.user,
         cagr=0,
         drawdown=0,
+        cagr_benchmark=0,
+        drawdown_benchmark=0,
+        benchmark=data.benchmark,
     )
 
 
@@ -103,6 +109,23 @@ async def model(data: Annotated[JobFormData, Form()], session: SessionDep):
     balance = results.portfolio['Dual Momentum Balance']
     job.cagr = float(((balance.iloc[-1] / job.initial_investment) ** (12 / len(balance.index)) - 1) * 100)
     job.drawdown = float(dm.compute_drawdowns(results.portfolio)['Dual Momentum Maximum Drawdown'][0][:-1])
+
+    start_date = results.portfolio.index[0]
+    end_date = results.portfolio.index[-1]
+
+    benchmark_returns, _ = dm.compute_monthly_returns_with_fallback(job.benchmark)
+    benchmark_returns = benchmark_returns.loc[start_date:end_date]
+    benchmark = job.initial_investment * (1 + benchmark_returns).cumprod().iloc[-1]
+    benchmark = benchmark[job.benchmark]
+    job.cagr_benchmark = round(((benchmark / job.initial_investment) ** (12 / len(benchmark_returns.index)) - 1) * 100, 2)
+
+    benchmark_prices = utils.get_closing_prices(job.benchmark)
+    benchmark_prices = benchmark_prices[start_date:end_date]
+    benchmark_monthly_closes = benchmark_prices.groupby(pd.Grouper(freq='ME')).nth(-1)
+    benchmark_running_max = np.maximum.accumulate(benchmark_monthly_closes)
+    benchmark_drawdown_pct = (benchmark_monthly_closes - benchmark_running_max) / benchmark_running_max * 100
+    job.drawdown_benchmark = abs(round(benchmark_drawdown_pct.min(), 2))
+
     job.start_year = results.portfolio.index[0].year
     job.start_month = results.portfolio.index[0].month
     job = job_service.create_job(session, job)

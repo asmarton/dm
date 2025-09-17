@@ -26,6 +26,9 @@ class Job(Base):
     rebalance_threshold = Column(Double, nullable=False, default=0.0, server_default='0.0')
     cagr = Column(Double, nullable=False, default=0.0, server_default='0.0')
     drawdown = Column(Double, nullable=False, default=0.0, server_default='0.0')
+    cagr_benchmark = Column(Double, nullable=False, default=0.0, server_default='0.0')
+    drawdown_benchmark = Column(Double, nullable=False, default=0.0, server_default='0.0')
+    benchmark = Column(String, nullable=False, default='SPY', server_default='SPY')
     user = Column(String, nullable=False, server_default='*')
     created_at = Column(DateTime, nullable=False, server_default=func.now())
 
