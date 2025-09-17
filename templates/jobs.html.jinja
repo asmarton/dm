@@ -46,6 +46,8 @@
                 <th><abbr title="Single Absolute Momentum">SAM</abbr></th>
                 <th>CAGR</th>
                 <th>Drawdown</th>
+                <th>CAGR Benchmark</th>
+                <th>Drawdown Benchmark</th>
                 <th>Max Assets</th>
                 <th>Rebalance Period</th>
                 <th>Lookback Period</th>
@@ -53,8 +55,6 @@
                 <th>Rebalance Threshold</th>
                 <th>Switching Cost</th>
                 <th>Benchmark</th>
-                <th>CAGR Benchmark</th>
-                <th>Drawdown Benchmark</th>
                 <th>Returns</th>
                 <th>Trades</th>
                 <th>Created At</th>
@@ -74,6 +74,8 @@
                     <td>{{ job.single_absolute_momentum if job.single_absolute_momentum is not none }}</td>
                     <td>{{ cagr[job.id] }}%</td>
                     <td>{{ drawdown[job.id] }}</td>
+                    <td>{{ job.cagr_benchmark }}</td>
+                    <td>{{ job.drawdown_benchmark }}</td>
                     <td>{{ job.max_assets }}</td>
                     <td>{{ job.rebalance_period }}</td>
                     <td>{{ job.lookback_period }}</td>
@@ -81,8 +83,6 @@
                     <td>{{ job.rebalance_threshold }}</td>
                     <td>{{ job.switching_cost }}%</td>
                     <td>{{ job.benchmark }}</td>
-                    <td>{{ job.cagr_benchmark }}</td>
-                    <td>{{ job.drawdown_benchmark }}</td>
                     <td><a href="/static/results/{{ job.id }}-portfolio.csv" download class="button !text-black !no-underline">Download ⬇</a></td>
                     <td><a href="/static/results/{{ job.id }}-trades.csv" download class="button !text-black !no-underline">Download ⬇</a></td>
                     <td>{{ job.created_at }}</td>

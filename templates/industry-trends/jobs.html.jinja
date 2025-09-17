@@ -43,6 +43,8 @@
                 <th>Initial Amt</th>
                 <th>CAGR</th>
                 <th>Drawdown</th>
+                <th>CAGR Benchmark</th>
+                <th>Drawdown Benchmark</th>
                 <th>Tickers</th>
                 <th>Up</th>
                 <th>Down</th>
@@ -52,8 +54,6 @@
                 <th>Min trade cost</th>
                 <th>Rebalance threshold</th>
                 <th>Benchmark</th>
-                <th>CAGR Benchmark</th>
-                <th>Drawdown Benchmark</th>
                 <th>Created At</th>
             </tr>
         </thead>
@@ -68,6 +68,8 @@
                     <td>${{ job.initial_balance }}</td>
                     <td>{{ job.cagr }}</td>
                     <td>{{ job.drawdown }}</td>
+                    <td>{{ job.cagr_benchmark }}</td>
+                    <td>{{ job.drawdown_benchmark }}</td>
                     <td>{{ job.tickers }}</td>
                     <td>{{ job.up_period }}</td>
                     <td>{{ job.down_period }}</td>
@@ -77,8 +79,6 @@
                     <td>{{ job.trade_cost_min }}</td>
                     <td>{{ job.rebalance_threshold }}</td>
                     <td>{{ job.benchmark }}</td>
-                    <td>{{ job.cagr_benchmark }}</td>
-                    <td>{{ job.drawdown_benchmark }}</td>
                     <td>{{ job.created_at }}</td>
                 </tr>
             {% endfor %}
